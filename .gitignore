@@ -1,0 +1,31 @@
+# Environment & secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data files (too large / potentially licensed)
+data/raw/*.csv
+data/*.csv
+data/raw/*.json
+
+# Keep example and processed outputs we want to share
+!data/raw/.gitkeep
+!data/.gitkeep
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
