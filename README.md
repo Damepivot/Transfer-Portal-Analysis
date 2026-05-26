@@ -8,23 +8,41 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 
 ## Charts
 
+> Regenerate any time with `python3 generate_charts.py` — pulls live from the database.
+
 ### Transfer Success Rate by Tier Movement
 ![Tier heatmap](assets/01_tier_heatmap.png)
+*Every cell shows the success rate and sample size for that origin → destination tier pair. The top-left (High Major → High Major) is the most active route at 83.7%. Mid-major lateral moves (center) are 0% — the worst route in the dataset.*
+
+---
 
 ### High-Major Success Rate by Origin Tier
 ![Origin tier success](assets/02_origin_tier_success.png)
+*All four origin tiers produce above a 73% success rate at high-major destinations — but the gap between high-mid major (81.9%) and mid-major (73.2%) is meaningful. Low-major step-ups (80.6%) outperform mid-major laterals by a wide margin.*
+
+---
 
 ### Top 15 Transfers by Context Score
 ![Top transfers](assets/03_top_transfers.png)
+*Context score = `bpm_after × tier_weight × role_weight`. It rewards performing at a high level in a harder environment with a smaller role. Maliq Brown (Syracuse → Duke) and Chris Manon (Cornell → Vanderbilt) lead the dataset.*
+
+---
 
 ### Recruiting Composite vs Transfer Success
 ![Recruit vs success](assets/04_recruit_vs_success.png)
+*Recruiting pedigree is the single strongest predictor of transfer success. Elite recruits (90+ composite) succeed at 83.5% and average +4 BPM after transferring. Low-recruit players succeed at 42.6% and average negative BPM — pedigree doesn't expire.*
+
+---
 
 ### Success Rate by Position & Origin Tier (High-Major Destinations)
 ![Position success](assets/05_position_success.png)
+*The standout: high-mid major Centers transferring to high-major programs succeed at 92.9% — the highest of any position/route combination. Low-major Forwards are also elite at 87.5%. Mid-major Guards are the weakest route at 69.2%.*
+
+---
 
 ### Verdict Distribution
 ![Verdict distribution](assets/06_verdict_distribution.png)
+*Across all 581 scored transfers, 66.8% are High Value or Solid Addition. The model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from.*
 
 ---
 
