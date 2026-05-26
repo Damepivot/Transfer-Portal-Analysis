@@ -7,3 +7,6 @@ statsmodels
 python-dotenv
 beautifulsoup4
 lxml
+kaleido
+matplotlib
+seaborn

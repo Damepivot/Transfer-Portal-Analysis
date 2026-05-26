@@ -2,6 +2,30 @@
 
 Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
 
+> **581 scored transfers · 100% real CBB Reference data · zero estimation**
+
+---
+
+## Charts
+
+### Transfer Success Rate by Tier Movement
+![Tier heatmap](assets/01_tier_heatmap.png)
+
+### High-Major Success Rate by Origin Tier
+![Origin tier success](assets/02_origin_tier_success.png)
+
+### Top 15 Transfers by Context Score
+![Top transfers](assets/03_top_transfers.png)
+
+### Recruiting Composite vs Transfer Success
+![Recruit vs success](assets/04_recruit_vs_success.png)
+
+### Success Rate by Position & Origin Tier (High-Major Destinations)
+![Position success](assets/05_position_success.png)
+
+### Verdict Distribution
+![Verdict distribution](assets/06_verdict_distribution.png)
+
 ---
 
 ## Conference Tiers
