@@ -8,15 +8,12 @@ Load real Kaggle data into PostgreSQL.
 Run: python etl/load_real_data.py
 """
 
-import random
 import sys
 import psycopg2
 import pandas as pd
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from db import DB_CONFIG
-
-random.seed(99)
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "raw"
 
@@ -83,52 +80,6 @@ def parse_height_in(height_str) -> int | None:
     return None
 
 
-def rnd(lo, hi, decimals=2):
-    return round(random.uniform(lo, hi), decimals)
-
-
-def estimate_player_stats(adjoe: float, player_rate: float, position: str,
-                          bpm_before: float | None = None) -> dict:
-    """
-    Estimate individual player stats from team offensive efficiency and player rating.
-    adjoe:       team adjusted offensive efficiency (avg ~100, range 85-130)
-    player_rate: 0-1 recruiting composite (0.80 = borderline D1, 0.95 = elite)
-    bpm_before:  player's BPM at prior school; when provided, 60% weight given to
-                 the player's track record so upward transfers don't get inflated stats
-                 just from landing on a good team.
-    """
-    team_quality = (adjoe - 100) / 15        # normalised: 0 = avg, 1 = great
-    player_quality = (player_rate - 0.85) * 10 if player_rate else 0
-    team_bpm = team_quality * 2 + player_quality
-
-    if bpm_before is not None:
-        # Estimated post-transfer BPM is purely the player's own track record,
-        # regressed 65% toward mean. Team quality is intentionally excluded here
-        # because it already lives in context_score — including it twice inflates
-        # verdicts for upward transfers regardless of actual individual performance.
-        bpm = round(bpm_before * 0.65 + rnd(-0.8, 0.8), 2)
-    else:
-        bpm = round(team_bpm + rnd(-1.5, 1.5), 2)
-    ppg = round(max(2.0, 10 + team_quality * 3 + player_quality * 0.8 + rnd(-3, 3)), 1)
-
-    return {
-        "games":         random.randint(22, 35),
-        "games_started": random.randint(5, 30),
-        "mpg":           rnd(14, 34),
-        "ppg":           ppg,
-        "rpg":           rnd(1.5, 8.5),
-        "apg":           rnd(0.5, 6.0),
-        "spg":           rnd(0.3, 1.8),
-        "bpg":           rnd(0.1, 2.0),
-        "fg_pct":        rnd(0.38, 0.55),
-        "three_pct":     rnd(0.28, 0.43),
-        "ft_pct":        rnd(0.62, 0.85),
-        "ts_pct":        rnd(0.49, 0.63),
-        "efg_pct":       rnd(0.44, 0.60),
-        "usg_pct":       rnd(14.0, 30.0),
-        "bpm":           bpm,
-        "porpag":        round(bpm * 0.7 + rnd(-0.3, 0.3), 2),
-    }
 
 
 def main():
@@ -374,48 +325,19 @@ def main():
         )
         inserted_transfers += cur.rowcount
 
-        # Player season BEFORE transfer (at from_school, prev season)
+        # Structural placeholders — BPM filled exclusively by CBB Reference UPSERT, no estimation
         prev_seasons = [s for s in CBB_FILE_TO_SEASON.values() if s < season]
         if prev_seasons:
             prev_season = max(prev_seasons)
             prev_tid    = match_team(from_name, prev_season)
             if prev_tid:
-                adjoe_prev = team_adjoe.get((from_name, prev_season), 100.0)
-                composite  = row["composite"] / 100 if pd.notna(row["composite"]) else 0.85
-                stats_before = estimate_player_stats(adjoe_prev, composite, row["pos_clean"])
                 cur.execute(
-                    """INSERT INTO player_seasons
-                       (player_id,team_id,season,games,games_started,mpg,ppg,rpg,apg,spg,bpg,
-                        fg_pct,three_pct,ft_pct,ts_pct,efg_pct,usg_pct,bpm,porpag)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                       ON CONFLICT (player_id,team_id,season) DO NOTHING""",
-                    (player_id, prev_tid, prev_season,
-                     stats_before["games"], stats_before["games_started"], stats_before["mpg"],
-                     stats_before["ppg"], stats_before["rpg"], stats_before["apg"],
-                     stats_before["spg"], stats_before["bpg"], stats_before["fg_pct"],
-                     stats_before["three_pct"], stats_before["ft_pct"], stats_before["ts_pct"],
-                     stats_before["efg_pct"], stats_before["usg_pct"],
-                     stats_before["bpm"], stats_before["porpag"])
+                    "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                    (player_id, prev_tid, prev_season)
                 )
-
-        # Player season AFTER transfer (at to_school, transfer season)
-        adjoe_after = team_adjoe.get((to_name, season), 100.0)
-        composite   = row["composite"] / 100 if pd.notna(row["composite"]) else 0.85
-        prior_bpm   = stats_before["bpm"] if prev_seasons and prev_tid else None
-        stats_after = estimate_player_stats(adjoe_after, composite, row["pos_clean"], bpm_before=prior_bpm)
         cur.execute(
-            """INSERT INTO player_seasons
-               (player_id,team_id,season,games,games_started,mpg,ppg,rpg,apg,spg,bpg,
-                fg_pct,three_pct,ft_pct,ts_pct,efg_pct,usg_pct,bpm,porpag)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-               ON CONFLICT (player_id,team_id,season) DO NOTHING""",
-            (player_id, to_tid, season,
-             stats_after["games"], stats_after["games_started"], stats_after["mpg"],
-             stats_after["ppg"], stats_after["rpg"], stats_after["apg"],
-             stats_after["spg"], stats_after["bpg"], stats_after["fg_pct"],
-             stats_after["three_pct"], stats_after["ft_pct"], stats_after["ts_pct"],
-             stats_after["efg_pct"], stats_after["usg_pct"],
-             stats_after["bpm"], stats_after["porpag"])
+            "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+            (player_id, to_tid, season)
         )
 
     conn.commit()
@@ -480,47 +402,19 @@ def main():
             )
             on3_inserted += cur.rowcount
 
-            # Before season player stats
-            composite_rate = row["recruiting_composite"] / 100 if pd.notna(row.get("recruiting_composite")) else 0.85
+            # Structural placeholders — BPM filled exclusively by CBB Reference UPSERT, no estimation
             prev_seasons = [s for s in CBB_FILE_TO_SEASON.values() if s < season]
             if prev_seasons:
                 prev_season = max(prev_seasons)
                 prev_tid    = match_team(from_name, prev_season)
                 if prev_tid:
-                    adjoe_prev = team_adjoe.get((from_name, prev_season), 100.0)
-                    stats_before = estimate_player_stats(adjoe_prev, composite_rate, row["pos_clean"])
                     cur.execute(
-                        """INSERT INTO player_seasons
-                           (player_id,team_id,season,games,games_started,mpg,ppg,rpg,apg,spg,bpg,
-                            fg_pct,three_pct,ft_pct,ts_pct,efg_pct,usg_pct,bpm,porpag)
-                           VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                           ON CONFLICT (player_id,team_id,season) DO NOTHING""",
-                        (player_id, prev_tid, prev_season,
-                         stats_before["games"], stats_before["games_started"], stats_before["mpg"],
-                         stats_before["ppg"], stats_before["rpg"], stats_before["apg"],
-                         stats_before["spg"], stats_before["bpg"], stats_before["fg_pct"],
-                         stats_before["three_pct"], stats_before["ft_pct"], stats_before["ts_pct"],
-                         stats_before["efg_pct"], stats_before["usg_pct"],
-                         stats_before["bpm"], stats_before["porpag"])
+                        "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                        (player_id, prev_tid, prev_season)
                     )
-
-            # After season player stats
-            adjoe_after  = team_adjoe.get((to_name, season), 100.0)
-            prior_bpm    = stats_before["bpm"] if prev_seasons and prev_tid else None
-            stats_after  = estimate_player_stats(adjoe_after, composite_rate, row["pos_clean"], bpm_before=prior_bpm)
             cur.execute(
-                """INSERT INTO player_seasons
-                   (player_id,team_id,season,games,games_started,mpg,ppg,rpg,apg,spg,bpg,
-                    fg_pct,three_pct,ft_pct,ts_pct,efg_pct,usg_pct,bpm,porpag)
-                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                   ON CONFLICT (player_id,team_id,season) DO NOTHING""",
-                (player_id, to_tid, season,
-                 stats_after["games"], stats_after["games_started"], stats_after["mpg"],
-                 stats_after["ppg"], stats_after["rpg"], stats_after["apg"],
-                 stats_after["spg"], stats_after["bpg"], stats_after["fg_pct"],
-                 stats_after["three_pct"], stats_after["ft_pct"], stats_after["ts_pct"],
-                 stats_after["efg_pct"], stats_after["usg_pct"],
-                 stats_after["bpm"], stats_after["porpag"])
+                "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                (player_id, to_tid, season)
             )
 
         conn.commit()
@@ -528,15 +422,39 @@ def main():
     else:
         print("No On3 data found — run etl/scrape_on3.py first")
 
-    # ── Override estimated stats with real CBB Reference player stats ─────────
+    # ── Apply real CBB Reference player stats (UPSERT — only source of truth for BPM) ──────
     cbb_stats_path = DATA_DIR / "cbb_player_stats.csv"
     if cbb_stats_path.exists():
         print("Applying real CBB Reference player stats...")
         cbb_df = pd.read_csv(cbb_stats_path)
+        cbb_df = cbb_df[cbb_df["Player"] != "Team Totals"].copy()
 
-        # Build lowercase name → player_id lookup
         cur.execute("SELECT player_id, LOWER(full_name) FROM players")
         name_to_pid = {name: pid for pid, name in cur.fetchall()}
+
+        cur.execute("SELECT DISTINCT player_id FROM transfers")
+        transfer_pids = {r[0] for r in cur.fetchall()}
+
+        def get_or_create_team(school, season):
+            tid = match_team(school, season)
+            if tid:
+                return tid
+            cur.execute(
+                "SELECT team_id FROM teams WHERE LOWER(name) = LOWER(%s) AND season = %s LIMIT 1",
+                (school, season)
+            )
+            row = cur.fetchone()
+            if row:
+                team_id_map[(school, season)] = row[0]
+                return row[0]
+            cur.execute(
+                "INSERT INTO teams (name, season) VALUES (%s, %s) RETURNING team_id",
+                (school, season)
+            )
+            tid = cur.fetchone()[0]
+            team_id_map[(school, season)] = tid
+            all_team_names.append(school)
+            return tid
 
         def parse_stat(val):
             try:
@@ -545,19 +463,14 @@ def main():
             except (ValueError, TypeError):
                 return None
 
-        updated = skipped_real = 0
+        upserted = skipped_real = 0
         for _, row in cbb_df.iterrows():
             player_name = str(row["Player"]).strip()
             school      = str(row["school"]).strip()
             season      = str(row["season"]).strip()
 
             pid = name_to_pid.get(player_name.lower())
-            if not pid:
-                skipped_real += 1
-                continue
-
-            tid = match_team(school, season)
-            if not tid:
+            if not pid or pid not in transfer_pids:
                 skipped_real += 1
                 continue
 
@@ -566,8 +479,8 @@ def main():
             dbpm    = parse_stat(row.get("DBPM"))
             ts_pct  = parse_stat(row.get("TS%"))
             usg_pct = parse_stat(row.get("USG%"))
+            games   = int(row["G"]) if pd.notna(row.get("G")) else None
 
-            # Sanity cap — real college BPM physically cannot exceed ±15
             if bpm is None or abs(bpm) > 15:
                 skipped_real += 1
                 continue
@@ -576,22 +489,26 @@ def main():
             if dbpm is not None and abs(dbpm) > 15:
                 dbpm = None
 
+            tid = get_or_create_team(school, season)
+
             cur.execute(
-                """UPDATE player_seasons
-                   SET bpm    = %s,
-                       obpm   = COALESCE(%s, obpm),
-                       dbpm   = COALESCE(%s, dbpm),
-                       ts_pct  = COALESCE(%s, ts_pct),
-                       usg_pct = COALESCE(%s, usg_pct)
-                   WHERE player_id = %s AND team_id = %s AND season = %s""",
-                (bpm, obpm, dbpm, ts_pct, usg_pct, pid, tid, season)
+                """INSERT INTO player_seasons (player_id, team_id, season, bpm, obpm, dbpm, ts_pct, usg_pct, games)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   ON CONFLICT (player_id, team_id, season) DO UPDATE SET
+                       bpm     = EXCLUDED.bpm,
+                       obpm    = COALESCE(EXCLUDED.obpm,    player_seasons.obpm),
+                       dbpm    = COALESCE(EXCLUDED.dbpm,    player_seasons.dbpm),
+                       ts_pct  = COALESCE(EXCLUDED.ts_pct,  player_seasons.ts_pct),
+                       usg_pct = COALESCE(EXCLUDED.usg_pct, player_seasons.usg_pct),
+                       games   = COALESCE(EXCLUDED.games,   player_seasons.games)""",
+                (pid, tid, season, bpm, obpm, dbpm, ts_pct, usg_pct, games)
             )
-            updated += cur.rowcount
+            upserted += cur.rowcount
 
         conn.commit()
-        print(f"  {updated} player-season rows updated with real stats ({skipped_real} unmatched)")
+        print(f"  {upserted} player-season rows upserted with real stats ({skipped_real} skipped — not a transfer player or no CBB data)")
     else:
-        print("No CBB Reference stats found — using estimates (run etl/scrape_cbb_reference.py to improve accuracy)")
+        print("No CBB Reference stats found — run etl/scrape_cbb_reference.py first")
 
     # ── Refresh materialized view ─────────────────────────────────────────────
     print("Refreshing tier_pair_expectations...")

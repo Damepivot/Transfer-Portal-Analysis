@@ -305,15 +305,35 @@ def main():
     conn = psycopg2.connect(**DB_CONFIG)
     cur  = conn.cursor()
 
-    # Only scrape school-seasons that appear in our actual transfer data
+    # Fetch transfer-season pairs AND the prior season for each from_school,
+    # so bpm_before uses real stats instead of estimates.
+    PRIOR = {"2022-23": "2021-22", "2023-24": "2022-23", "2024-25": "2023-24"}
     cur.execute("""
         SELECT DISTINCT t.name AS school, tr.season
         FROM transfers tr
         JOIN teams t ON (tr.from_team_id = t.team_id OR tr.to_team_id = t.team_id)
         WHERE tr.season IN ('2021-22','2022-23','2023-24','2024-25')
-        ORDER BY tr.season, t.name
+        UNION
+        SELECT DISTINCT t.name AS school, tr.season
+        FROM transfers tr
+        JOIN teams t ON tr.from_team_id = t.team_id
+        WHERE tr.season IN ('2022-23','2023-24','2024-25')
+        ORDER BY 2, 1
     """)
-    school_seasons = cur.fetchall()
+    raw_pairs = cur.fetchall()
+    # Add prior-season rows for each from_school
+    prior_pairs = set()
+    cur.execute("""
+        SELECT DISTINCT t.name, tr.season
+        FROM transfers tr
+        JOIN teams t ON tr.from_team_id = t.team_id
+        WHERE tr.season IN ('2022-23','2023-24','2024-25')
+    """)
+    for school, season in cur.fetchall():
+        if season in PRIOR:
+            prior_pairs.add((school, PRIOR[season]))
+    school_seasons = list(set(raw_pairs) | prior_pairs)
+    school_seasons.sort(key=lambda x: (x[1], x[0]))
     cur.close()
     conn.close()
 

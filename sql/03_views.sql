@@ -1,3 +1,11 @@
+-- NCAA Transfer Market Analysis — Views
+-- Safe to re-run: drops dependents first, then recreates.
+DROP VIEW IF EXISTS league_transfer_trends    CASCADE;
+DROP VIEW IF EXISTS recruitment_profiles      CASCADE;
+DROP VIEW IF EXISTS team_transfer_report      CASCADE;
+DROP VIEW IF EXISTS individual_transfer_scores CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS tier_pair_expectations CASCADE;
+
 -- ============================================================
 -- MATERIALIZED VIEW: Peer expectation baseline per tier jump
 -- Rebuild after each ETL run: REFRESH MATERIALIZED VIEW tier_pair_expectations;
@@ -17,10 +25,12 @@ SELECT
     COUNT(*)             AS sample_size
 FROM transfers t
 JOIN players p ON t.player_id = p.player_id
-JOIN player_seasons ps_after
-    ON t.player_id = ps_after.player_id AND ps_after.season = t.season
 JOIN teams t_from ON t.from_team_id = t_from.team_id
 JOIN teams t_to   ON t.to_team_id   = t_to.team_id
+JOIN player_seasons ps_after
+    ON t.player_id      = ps_after.player_id
+    AND ps_after.season = t.season
+    AND ps_after.team_id IN (SELECT team_id FROM teams WHERE name = t_to.name)
 JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
 JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
 GROUP BY 1, 2, 3;
@@ -33,7 +43,7 @@ GROUP BY 1, 2, 3;
 --   role_weight: smaller role = harder to produce BPM, more credit
 -- BPM = Box Plus/Minus (offensive + defensive combined)
 -- ============================================================
-CREATE VIEW individual_transfer_scores AS
+CREATE OR REPLACE VIEW individual_transfer_scores AS
 WITH recruit_buckets AS (
     SELECT
         player_id,
@@ -91,16 +101,27 @@ base AS (
     FROM transfers tr
     JOIN players p           ON tr.player_id   = p.player_id
     JOIN recruit_buckets rb  ON p.player_id    = rb.player_id
-    JOIN player_seasons ps_before
-        ON tr.player_id = ps_before.player_id
-        AND ps_before.season = (
-            SELECT MAX(season) FROM player_seasons
-            WHERE player_id = tr.player_id AND season < tr.season
-        )
-    JOIN player_seasons ps_after
-        ON tr.player_id = ps_after.player_id AND ps_after.season = tr.season
+    -- Resolve school names first so subqueries below can reference t_from.name / t_to.name
     JOIN teams t_from ON tr.from_team_id = t_from.team_id
     JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
+    -- Pin to the player's most-recent season AT the from-school (matched by name across seasons)
+    JOIN player_seasons ps_before
+        ON tr.player_id = ps_before.player_id
+        AND ps_before.team_id IN (SELECT team_id FROM teams WHERE name = t_from.name)
+        AND ps_before.season = (
+            SELECT MAX(ps2.season)
+            FROM player_seasons ps2
+            JOIN teams t2 ON ps2.team_id = t2.team_id
+            WHERE ps2.player_id = tr.player_id
+              AND t2.name       = t_from.name
+              AND ps2.season    < tr.season
+              AND ps2.bpm IS NOT NULL
+        )
+    -- Pin to the player's stats AT the to-school in the transfer season
+    JOIN player_seasons ps_after
+        ON tr.player_id = ps_after.player_id
+        AND ps_after.season  = tr.season
+        AND ps_after.team_id IN (SELECT team_id FROM teams WHERE name = t_to.name)
     JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
     JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
     JOIN tier_pair_expectations tpe
@@ -108,6 +129,8 @@ base AS (
         AND c_to.tier       = tpe.to_tier
         AND rb.recruit_tier = tpe.recruit_tier
         AND tpe.sample_size >= 5
+    WHERE ps_before.bpm IS NOT NULL
+      AND ps_after.bpm  IS NOT NULL
 )
 SELECT
     transfer_id,
@@ -154,7 +177,7 @@ FROM base;
 -- VIEW: Team Transfer Portfolio Report
 -- Shows each team's transfer class composition + outcome
 -- ============================================================
-CREATE VIEW team_transfer_report AS
+CREATE OR REPLACE VIEW team_transfer_report AS
 SELECT
     t.name                                                     AS team,
     c.tier                                                     AS team_tier,
@@ -189,7 +212,7 @@ GROUP BY t.name, c.tier, tr.season, ts.wins, ts.losses, ts.adj_efficiency;
 -- A high dest_tier correctly shows a higher required pre-transfer floor
 -- because the success rate for weak-profile players is near zero there.
 -- ============================================================
-CREATE VIEW recruitment_profiles AS
+CREATE OR REPLACE VIEW recruitment_profiles AS
 SELECT
     c_to.tier                                                                              AS dest_tier,
     c_from.tier                                                                            AS origin_tier,
@@ -234,7 +257,7 @@ ORDER BY 1, 2, 3;
 -- Answers: what profile and position tends to work per tier,
 -- expected context score, and role/size patterns
 -- ============================================================
-CREATE VIEW league_transfer_trends AS
+CREATE OR REPLACE VIEW league_transfer_trends AS
 SELECT
     c_to.tier                                                   AS dest_tier,
     c_from.tier                                                 AS origin_tier,

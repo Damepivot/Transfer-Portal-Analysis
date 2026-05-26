@@ -885,93 +885,115 @@ with tab6:
         "and production — see which historical transfers fit and what to expect."
     )
 
-    st.markdown("### Program & Position Need")
+    # ── Section 1: Your Program ───────────────────────────────────────────────
+    st.markdown("### Your Program")
     c1, c2, c3 = st.columns(3)
     with c1:
         coach_dest_tier = st.selectbox(
             "Your Program Tier", TIER_ORDER,
             format_func=lambda x: TIER_LABELS[x], key="coach_dest"
         )
-        coach_origin_tier = st.selectbox(
-            "Recruit From Tier", ["Any"] + TIER_ORDER,
-            format_func=lambda x: TIER_LABELS.get(x, x), key="coach_origin"
+        try:
+            tier_confs = query(
+                "SELECT name FROM conferences WHERE tier = %s ORDER BY name",
+                [coach_dest_tier]
+            )["name"].tolist()
+        except Exception:
+            tier_confs = []
+        coach_conference = st.selectbox(
+            "Your Conference",
+            ["Any"] + tier_confs,
+            key="coach_conf",
+            help="Narrows results to transfers that succeeded specifically within your conference — same tier, different cultures",
         )
     with c2:
-        coach_position = st.selectbox("Position Need", ["Any", "G", "G/F", "F", "F/C", "C"], key="coach_pos")
-        coach_season   = st.selectbox("Season Focus", ["Any", "2023-24", "2024-25", "2022-23", "2021-22"], key="coach_season")
-    with c3:
+        coach_season = st.selectbox("Season Focus", ["Any", "2023-24", "2024-25", "2022-23", "2021-22"], key="coach_season")
         coach_verdict = st.multiselect(
             "Minimum Verdict",
             ["High Value", "Solid Addition", "Neutral", "Didn't Fit"],
             default=["High Value", "Solid Addition"],
             key="coach_verdict"
         )
+    with c3:
+        coach_origin_tier = st.selectbox(
+            "Recruit From Tier", ["Any"] + TIER_ORDER,
+            format_func=lambda x: TIER_LABELS.get(x, x), key="coach_origin"
+        )
 
-    st.markdown("### Role Need — What You Need This Year")
-    st.caption("Set the role you need filled. The model projects each player's usage and minutes at your tier level — not what they had before.")
-    cr1, cr2, cr3 = st.columns(3)
-    with cr1:
-        coach_proj_mpg_min = st.slider("Min Projected MPG", 8, 36, 18, 1, key="coach_proj_mpg",
-                                       help="Minutes per game you expect this player to contribute")
-    with cr2:
-        coach_proj_usg_min = st.slider("Min Projected USG%", 8.0, 32.0, 14.0, 1.0, key="coach_proj_usg",
-                                       help="Usage rate you need at your program — system projects based on their tier move")
-    with cr3:
-        role_label_map = {
-            "Any Role": (0, 40),
-            "Starter (25+ min)": (25, 40),
-            "Key Rotation (18–25 min)": (18, 25),
-            "Role Player (10–18 min)": (10, 18),
-        }
-        coach_role_preset = st.selectbox("Role Template", list(role_label_map.keys()), key="coach_role_preset")
+    st.markdown("---")
 
-    st.markdown("### Player Profile Filters")
-    c4, c5, c6 = st.columns(3)
-    with c4:
-        coach_bpm_min  = st.slider("Min BPM (pre-transfer)", -5.0, 8.0, 0.0, 0.5, key="coach_bpm")
-        coach_usg_min  = st.slider("Min USG% (pre-transfer)", 10.0, 35.0, 14.0, 1.0, key="coach_usg")
-    with c5:
-        coach_h_min, coach_h_max = st.slider("Height Range (inches)", 68, 88, (70, 84), key="coach_height",
-                                              help="72=6'0\", 76=6'4\", 80=6'8\"")
+    # ── Section 2: What Did They Do Last Season? ──────────────────────────────
+    st.markdown("### What Did They Do Last Season?")
+    st.caption("Filter by the player's actual production and role at their previous school.")
+    cp1, cp2, cp3 = st.columns(3)
+    with cp1:
+        coach_prior_position = st.selectbox(
+            "Their Position Last Season",
+            ["Any", "G", "G/F", "F", "F/C", "C"],
+            key="coach_prior_pos",
+            help="Position they were listed at before transferring",
+        )
+        coach_bpm_min = st.slider("Min BPM Last Season", -5.0, 8.0, 0.0, 0.5, key="coach_bpm")
+    with cp2:
+        coach_usg_min = st.slider("Min USG% Last Season", 10.0, 35.0, 14.0, 1.0, key="coach_usg")
+        coach_h_min, coach_h_max = st.slider(
+            "Height Range (inches)", 68, 88, (70, 84), key="coach_height",
+            help="72=6'0\", 76=6'4\", 80=6'8\""
+        )
+    with cp3:
         coach_w_min, coach_w_max = st.slider("Weight Range (lbs)", 150, 290, (170, 260), key="coach_weight")
-    with c6:
         coach_birth_min = st.number_input("Born After (year)", 1998, 2007, 2000, key="coach_birth_min")
         coach_birth_max = st.number_input("Born Before (year)", 1998, 2008, 2006, key="coach_birth_max")
 
     st.markdown("---")
 
+    # ── Section 3: What Do You Need From Them This Year? ─────────────────────
+    st.markdown("### What Do You Need From Them This Year?")
+    st.caption("Set the role and position you'll play them in your system. May differ from what they did before.")
+    cr1, cr2, cr3 = st.columns(3)
+    with cr1:
+        coach_target_position = st.selectbox(
+            "Position in Your System",
+            ["Any", "G", "G/F", "F", "F/C", "C"],
+            key="coach_target_pos",
+            help="The position you'll play them — can differ from their prior position (e.g. converting a G/F into a F)",
+        )
+    with cr2:
+        # Roles defined by projected USG% at new tier — MPG data not available
+        role_label_map = {
+            "Any Role":                  (0,   100),
+            "Featured (22%+ USG)":       (22,  100),
+            "Rotation (17–22% USG)":     (17,  22),
+            "Role Player (12–17% USG)":  (12,  17),
+        }
+        coach_role_preset  = st.selectbox("Projected Role", list(role_label_map.keys()), key="coach_role_preset")
+        coach_proj_usg_min = st.slider("Min Projected USG%", 0.0, 35.0, 0.0, 1.0, key="coach_proj_usg",
+                                       help="Projected usage rate at your program based on historical tier averages")
+    with cr3:
+        if coach_target_position != "Any" and coach_prior_position != "Any" and coach_target_position != coach_prior_position:
+            st.info(f"Converting **{coach_prior_position} → {coach_target_position}**: showing players with the physical and production profile to make that switch.")
+
+    st.markdown("---")
+
     if st.button("Search Players", type="primary", key="coach_search_btn"):
-        # Pull league avg USG change and MPG for each origin_tier → dest_tier → position move
+        # Pull league avg USG change for each origin_tier → dest_tier → position move
         proj_sql = """
             SELECT origin_tier, position,
-                   COALESCE(avg_usg_change, 0) AS avg_usg_change,
-                   -- avg MPG after for this move type (from individual scores)
-                   (SELECT ROUND(AVG(its2.mpg_after)::NUMERIC, 1)
-                    FROM individual_transfer_scores its2
-                    JOIN transfers tr2 ON its2.transfer_id = tr2.transfer_id
-                    JOIN teams t2      ON tr2.from_team_id = t2.team_id
-                    JOIN conferences c2 ON t2.conference_id = c2.conference_id
-                    WHERE c2.tier = ltt.origin_tier
-                      AND its2.to_tier = %s
-                      AND its2.position = ltt.position
-                   ) AS avg_mpg_after
-            FROM league_transfer_trends ltt
+                   COALESCE(avg_usg_change, 0) AS avg_usg_change
+            FROM league_transfer_trends
             WHERE dest_tier = %s
             GROUP BY origin_tier, position, avg_usg_change
         """
         try:
-            proj_df = query(proj_sql, [coach_dest_tier, coach_dest_tier])
+            proj_df = query(proj_sql, [coach_dest_tier])
             proj_lookup = {
-                (row["origin_tier"], row["position"]): {
-                    "usg_change": float(row["avg_usg_change"] or 0),
-                    "avg_mpg":    float(row["avg_mpg_after"] or 20),
-                }
+                (row["origin_tier"], row["position"]): float(row["avg_usg_change"] or 0)
                 for _, row in proj_df.iterrows()
             }
         except Exception:
             proj_lookup = {}
 
-        mpg_preset_min, mpg_preset_max = role_label_map[coach_role_preset]
+        usg_preset_min, usg_preset_max = role_label_map[coach_role_preset]
 
         coach_sql = """
             SELECT
@@ -985,6 +1007,7 @@ with tab6:
                 its.from_tier,
                 its.to_school,
                 its.to_tier,
+                c_dest.name AS to_conference,
                 its.season,
                 its.bpm_before,
                 its.bpm_after,
@@ -998,27 +1021,42 @@ with tab6:
                 its.transfer_premium,
                 its.transfer_verdict
             FROM individual_transfer_scores its
+            JOIN transfers tr       ON its.transfer_id    = tr.transfer_id
+            JOIN teams t_dest       ON tr.to_team_id      = t_dest.team_id
+            JOIN conferences c_dest ON t_dest.conference_id = c_dest.conference_id
             WHERE its.to_tier = %s
               AND its.transfer_verdict = ANY(%s)
-              AND its.bpm_before >= %s
-              AND its.usage_before >= %s
         """
         coach_params = [
             coach_dest_tier,
             coach_verdict,
-            coach_bpm_min,
-            coach_usg_min,
         ]
 
+        if coach_conference != "Any":
+            coach_sql += " AND c_dest.name = %s"
+            coach_params.append(coach_conference)
         if coach_origin_tier != "Any":
             coach_sql += " AND its.from_tier = %s"
             coach_params.append(coach_origin_tier)
-        if coach_position != "Any":
+        if coach_prior_position != "Any":
             coach_sql += " AND its.position = %s"
-            coach_params.append(coach_position)
+            coach_params.append(coach_prior_position)
         if coach_season != "Any":
             coach_sql += " AND its.season = %s"
             coach_params.append(coach_season)
+        # If coach specified a target position different from prior, broaden to include
+        # adjacent positions that commonly convert (e.g. G/F if looking for F)
+        if coach_target_position != "Any" and coach_prior_position == "Any":
+            adjacent = {
+                "G": ["G", "G/F"],
+                "G/F": ["G", "G/F", "F"],
+                "F": ["G/F", "F", "F/C"],
+                "F/C": ["F", "F/C", "C"],
+                "C": ["F/C", "C"],
+            }
+            target_pool = adjacent.get(coach_target_position, [coach_target_position])
+            coach_sql += f" AND its.position IN ({','.join(['%s']*len(target_pool))})"
+            coach_params.extend(target_pool)
 
         coach_sql += " AND (its.height_in IS NULL OR its.height_in BETWEEN %s AND %s)"
         coach_sql += " AND (its.weight_lbs IS NULL OR its.weight_lbs BETWEEN %s AND %s)"
@@ -1035,40 +1073,63 @@ with tab6:
                 # ── Project role at coach's tier ──────────────────────────────
                 def project_role(row):
                     key = (row["from_tier"], row["position"])
-                    league = proj_lookup.get(key, {"usg_change": 0, "avg_mpg": row["usage_before"]})
-                    proj_usg = round(float(row["usage_before"] or 0) + league["usg_change"], 1)
-                    proj_mpg = round(float(league["avg_mpg"]), 1)
-                    if proj_mpg >= 25:
-                        role = "Projected Starter"
-                    elif proj_mpg >= 18:
-                        role = "Key Rotation"
-                    elif proj_mpg >= 10:
+                    usg_change = proj_lookup.get(key, 0)
+                    proj_usg = round(max(0, float(row["usage_before"] or 18) + usg_change), 1)
+                    if proj_usg >= 22:
+                        role = "Featured"
+                    elif proj_usg >= 17:
+                        role = "Rotation"
+                    elif proj_usg >= 12:
                         role = "Role Player"
                     else:
                         role = "Depth"
-                    return pd.Series({"proj_usg": proj_usg, "proj_mpg": proj_mpg, "proj_role": role})
+                    return pd.Series({"proj_usg": proj_usg, "proj_role": role})
 
                 proj_cols = results.apply(project_role, axis=1)
                 results = pd.concat([results, proj_cols], axis=1)
 
-                # Filter on role need
-                results = results[
-                    (results["proj_usg"] >= coach_proj_usg_min) &
-                    (results["proj_mpg"] >= mpg_preset_min) &
-                    (results["proj_mpg"] <= mpg_preset_max if mpg_preset_max < 40 else True)
-                ]
+                # Classify: Strong Match (all criteria met) vs Match (within tolerance)
+                def classify_match(row):
+                    bpm_ok   = float(row["bpm_before"]   or 0) >= coach_bpm_min
+                    usg_ok   = float(row["usage_before"] or 0) >= coach_usg_min
+                    role_ok  = (row["proj_usg"] >= usg_preset_min) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max)
+                    proj_ok  = row["proj_usg"] >= coach_proj_usg_min
+
+                    bpm_close  = float(row["bpm_before"]   or 0) >= coach_bpm_min  - 1.5
+                    usg_close  = float(row["usage_before"] or 0) >= coach_usg_min  - 3.0
+                    role_close = (row["proj_usg"] >= usg_preset_min - 3.0) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max + 3.0)
+                    proj_close = row["proj_usg"] >= coach_proj_usg_min - 3.0
+
+                    if bpm_ok and usg_ok and role_ok and proj_ok:
+                        return "Strong Match"
+                    elif bpm_close and usg_close and role_close and proj_close:
+                        return "Match"
+                    return None
+
+                results["match_quality"] = results.apply(classify_match, axis=1)
+                results = results[results["match_quality"].notna()].copy()
+                results["_sort"] = results["match_quality"].map({"Strong Match": 0, "Match": 1})
+                results = results.sort_values(["_sort", "context_score"], ascending=[True, False]).drop(columns=["_sort"])
 
                 if results.empty:
-                    st.warning("Players found but none project to your role need. Try lowering projected MPG or USG%.")
+                    st.warning("No players match those filters. Try loosening BPM, USG%, or role preset.")
                 else:
-                    st.success(f"{len(results)} players project to your role need")
+                    label = TIER_LABELS.get(coach_dest_tier, coach_dest_tier)
+                    conf_str = f" ({coach_conference})" if coach_conference != "Any" else ""
+                    pos_str = f" — targeting {coach_prior_position} → {coach_target_position}" if (
+                        coach_target_position != "Any" and coach_prior_position != "Any"
+                        and coach_target_position != coach_prior_position
+                    ) else (f" — {coach_target_position}s" if coach_target_position != "Any" else "")
+                    strong_n = (results["match_quality"] == "Strong Match").sum()
+                    match_n  = (results["match_quality"] == "Match").sum()
+                    st.success(f"**{strong_n} strong matches · {match_n} matches** at {label}{conf_str}{pos_str}")
 
                     # Role distribution
                     role_colors = {
-                        "Projected Starter": "#2ecc71",
-                        "Key Rotation":      "#f39c12",
-                        "Role Player":       "#2e75b6",
-                        "Depth":             "#7f8c8d",
+                        "Featured":    "#2ecc71",
+                        "Rotation":    "#f39c12",
+                        "Role Player": "#2e75b6",
+                        "Depth":       "#7f8c8d",
                     }
                     role_vc = results["proj_role"].value_counts().reset_index()
                     role_vc.columns = ["Role", "Count"]
@@ -1095,89 +1156,69 @@ with tab6:
                     # Summary metrics
                     mc1, mc2, mc3, mc4 = st.columns(4)
                     mc1.metric("Avg Context Score",  f"{results['context_score'].mean():.2f}")
-                    mc2.metric("Avg Proj MPG",        f"{results['proj_mpg'].mean():.1f}")
-                    mc3.metric("Avg Proj USG%",       f"{results['proj_usg'].mean():.1f}%")
-                    mc4.metric("Avg BPM (pre)",       f"{results['bpm_before'].mean():.2f}")
+                    mc2.metric("Avg Proj USG%",       f"{results['proj_usg'].mean():.1f}%")
+                    mc3.metric("Avg BPM Before",      f"{results['bpm_before'].mean():.2f}")
+                    mc4.metric("Avg BPM After",       f"{results['bpm_after'].mean():.2f}")
 
-                # Summary metrics
-                mc1, mc2, mc3, mc4 = st.columns(4)
-                mc1.metric("Avg Context Score",   f"{results['context_score'].mean():.2f}")
-                mc2.metric("Avg BPM Before",      f"{results['bpm_before'].mean():.2f}")
-                mc3.metric("Avg BPM After",       f"{results['bpm_after'].mean():.2f}")
-                mc4.metric("Avg USG Change",      f"{results['usg_change'].mean():+.1f}%")
+                    # OBPM vs DBPM
+                    if results["obpm_after"].notna().any():
+                        st.subheader("Offensive vs Defensive Contribution")
+                        obpm_avg = pd.DataFrame({
+                            "Component": ["OBPM (Offense)", "DBPM (Defense)"],
+                            "Value": [results["obpm_after"].mean(), results["dbpm_after"].mean()],
+                        })
+                        fig_ob = px.bar(
+                            obpm_avg, x="Component", y="Value", color="Component",
+                            color_discrete_map={"OBPM (Offense)": "#2e75b6", "DBPM (Defense)": "#c00000"},
+                        )
+                        fig_ob.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
+                        fig_ob.update_layout(margin=dict(t=10, b=10), showlegend=False)
+                        st.plotly_chart(fig_ob, use_container_width=True)
 
-                # Verdict distribution
-                vc = results["transfer_verdict"].value_counts().reset_index()
-                vc.columns = ["Verdict", "Count"]
-                fig_v = px.bar(
-                    vc, x="Verdict", y="Count",
-                    color="Verdict", color_discrete_map=VERDICT_COLORS,
-                    labels={"Count": "# Players"},
-                )
-                fig_v.update_layout(margin=dict(t=20, b=20), showlegend=False)
-                st.plotly_chart(fig_v, use_container_width=True)
-
-                # OBPM vs DBPM for results
-                if results["obpm_after"].notna().any():
-                    st.subheader("Offensive vs Defensive Contribution")
-                    obpm_avg = results[["obpm_after","dbpm_after"]].mean().reset_index()
-                    obpm_avg.columns = ["Component", "Value"]
-                    obpm_avg["Component"] = ["OBPM (Offense)", "DBPM (Defense)"]
-                    fig_ob = px.bar(
-                        obpm_avg, x="Component", y="Value",
-                        color="Component",
-                        color_discrete_map={"OBPM (Offense)": "#2e75b6", "DBPM (Defense)": "#c00000"},
+                    # Full results table
+                    st.subheader("Matching Players — Strong Matches First")
+                    st.caption("Proj USG% shows what this player projects to at YOUR tier. CBB Ref links open on Sports Reference.")
+                    results["height_str"] = results["height_in"].apply(
+                        lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
                     )
-                    fig_ob.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
-                    fig_ob.update_layout(margin=dict(t=20, b=20), showlegend=False)
-                    st.plotly_chart(fig_ob, use_container_width=True)
-
-                # OBPM vs DBPM
-                if results["obpm_after"].notna().any():
-                    st.subheader("Offensive vs Defensive Contribution")
-                    obpm_avg = pd.DataFrame({
-                        "Component": ["OBPM (Offense)", "DBPM (Defense)"],
-                        "Value": [results["obpm_after"].mean(), results["dbpm_after"].mean()],
-                    })
-                    fig_ob = px.bar(
-                        obpm_avg, x="Component", y="Value", color="Component",
-                        color_discrete_map={"OBPM (Offense)": "#2e75b6", "DBPM (Defense)": "#c00000"},
+                    results["cbb_ref"] = results["full_name"].apply(
+                        lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ', '+')}"
                     )
-                    fig_ob.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
-                    fig_ob.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                    st.plotly_chart(fig_ob, use_container_width=True)
-
-                # Full results table — projected role first
-                st.subheader("Matching Players — Sorted by Context Score")
-                st.caption("Proj MPG and Proj USG% show what this player projects to at YOUR tier, not what they had before.")
-                results["height_str"] = results["height_in"].apply(
-                    lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
-                )
-                display_cols = {
-                    "full_name":        "Player",
-                    "position":         "Pos",
-                    "height_str":       "Height",
-                    "weight_lbs":       "Wt",
-                    "birth_year":       "Born",
-                    "from_school":      "From School",
-                    "from_tier":        "From Tier",
-                    "season":           "Season",
-                    "proj_role":        "Projected Role",
-                    "proj_mpg":         "Proj MPG",
-                    "proj_usg":         "Proj USG%",
-                    "usage_before":     "USG Before",
-                    "bpm_before":       "BPM Before",
-                    "obpm_after":       "OBPM",
-                    "dbpm_after":       "DBPM",
-                    "context_score":    "Context Score",
-                    "transfer_verdict": "Verdict",
-                }
-                st.dataframe(
-                    results[[c for c in display_cols if c in results.columns]]
-                    .rename(columns=display_cols),
-                    use_container_width=True,
-                    hide_index=True,
-                )
+                    display_cols = {
+                        "match_quality":    "Match",
+                        "full_name":        "Player",
+                        "cbb_ref":          "CBB Ref",
+                        "position":         "Pos (Last Season)",
+                        "height_str":       "Height",
+                        "weight_lbs":       "Wt",
+                        "birth_year":       "Born",
+                        "from_school":      "From School",
+                        "from_tier":        "From Tier",
+                        "to_school":        "To School",
+                        "to_conference":    "Conference",
+                        "season":           "Season",
+                        "proj_role":        "Proj Role (Your Tier)",
+                        "proj_usg":         "Proj USG%",
+                        "usage_before":     "USG Before",
+                        "bpm_before":       "BPM Before",
+                        "obpm_after":       "OBPM",
+                        "dbpm_after":       "DBPM",
+                        "context_score":    "Context Score",
+                        "transfer_verdict": "Verdict",
+                    }
+                    display_df = (
+                        results[[c for c in display_cols if c in results.columns]]
+                        .rename(columns=display_cols)
+                    )
+                    st.dataframe(
+                        display_df,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
+                            "Match": st.column_config.TextColumn("Match", width="small"),
+                        },
+                    )
 
         except Exception as e:
             st.error(f"Query error: {e}")

@@ -40,11 +40,13 @@ context_score = bpm_after × tier_weight × role_weight
 
 **Why this matters:** A 6'10" low-major big going to a role at a Power 5 program may drop raw BPM but hold value — the context score surfaces that. A high-usage low-major guard who lands a bigger role at mid-major and posts production gets credit for both the tier competition and the usage context.
 
-### Verdicts (based on context_score)
-| Score | Verdict |
-|-------|---------|
-| > 2.5 | High Value |
-| > 1.0 | Solid Addition |
+### Verdicts (based on absolute bpm_after)
+Context score is a *ranking* metric — it rewards harder environments. Verdicts use a fixed BPM bar so the standard is consistent across tiers.
+
+| BPM After | Verdict |
+|-----------|---------|
+| > 2.0 | High Value |
+| > 0.5 | Solid Addition |
 | > −0.5 | Neutral |
 | ≤ −0.5 | Didn't Fit |
 
@@ -55,7 +57,7 @@ context_score = bpm_after × tier_weight × role_weight
 
 ---
 
-## Four Reports
+## Six Reports
 
 ### 1 — Individual Transfer Scores
 Full player-level breakdown: context score, BPM change, role change, verdict.
@@ -76,6 +78,10 @@ View: `league_transfer_trends`
 ### 5 — Player Fit Finder (dashboard only)
 Player inputs their profile (position, height, weight, birth year, BPM, USG%, current tier). System finds comparable transfers and shows which destination tiers they thrived in.
 Tab: Player Fit Finder in `app.py`
+
+### 6 — Coach Search (dashboard only)
+Coaches input their program tier, conference, season, and role need. System returns Strong Matches and Matches from the historical transfer pool with CBB Reference profile links.
+Tab: Coach Search in `app.py`
 
 ---
 
@@ -123,8 +129,10 @@ TransferPortal/
 │       ├── collegeBasketBallTransferMen.csv  ← Kaggle portal data
 │       ├── on3_transfers_combined.csv        ← On3 scraper output
 │       └── cbb_player_stats.csv             ← CBB Reference real player stats
-├── app.py                         ← 5-tab Streamlit dashboard
-└── requirements.txt
+├── app.py                         ← 6-tab Streamlit dashboard
+├── db.py                          ← shared DB connection config (reads .env)
+├── requirements.txt
+└── setup.sh                       ← one-shot environment setup
 ```
 
 ---
@@ -154,23 +162,19 @@ TransferPortal/
 
 ## Run Order
 ```bash
-# 1. Install dependencies (one time)
-pip install -r requirements.txt
+# 1. Copy env template and fill in your Postgres credentials
+cp .env.example .env
 
-# 2. Set up DB and seed conferences (one time)
-createdb ncaa_transfers
-python3 -c "
-import psycopg2
-# run sql/01_schema.sql, sql/02_seed_conferences.sql, sql/03_views.sql
-"
+# 2. Install dependencies and create the database
+bash setup.sh
 
 # 3. Scrape On3 portal data — includes height, weight, birth year
 python3 etl/scrape_on3.py
 
-# 4. Scrape real player stats from CBB Reference (~35 min)
+# 4. Scrape real player stats from CBB Reference (~35 min, resumable)
 python3 etl/scrape_cbb_reference.py
 
-# 5. Load all data into PostgreSQL (applies real stat overrides at the end)
+# 5. Load all data into PostgreSQL
 python3 etl/load_real_data.py
 
 # 6. Launch dashboard
@@ -180,7 +184,7 @@ streamlit run app.py
 ---
 
 ## Dashboard — app.py
-Five-tab Streamlit app running at `http://localhost:8501`
+Six-tab Streamlit app running at `http://localhost:8501`
 
 | Tab | Content |
 |-----|---------|
@@ -189,23 +193,22 @@ Five-tab Streamlit app running at `http://localhost:8501`
 | Team Portfolio | Transfer class composition, origin tier mix, premium vs wins |
 | Recruit Profiles | League-level stat floors + physical profile by tier and position |
 | Player Fit Finder | Input your profile → see comparable transfers + best destination tiers |
+| Coach Search | Filter by tier, conference, position, BPM/USG floor → ranked Strong Matches + Matches with CBB Reference links |
 
 Sidebar filters: season, position, destination tier.
 
 ---
 
 ## Current Status
-- [x] PostgreSQL schema built with height, weight, birth year fields
+- [x] PostgreSQL schema with height, weight, birth year, recruiting composite
 - [x] 31 conferences seeded across 4 tiers
 - [x] CBB team stats loaded (cbb21–cbb26, 6 seasons)
-- [x] Kaggle transfer portal data loaded (2019–2022)
-- [x] On3 transfer data scraped and loaded (2023–2025, 2,178 committed)
-- [x] Context score model live (tier weight × role weight × BPM)
-- [x] New verdicts: High Value / Solid Addition / Neutral / Didn't Fit
-- [x] 5 SQL views including league_transfer_trends and updated recruitment_profiles
-- [x] 5-tab Streamlit dashboard live at localhost:8501 (Player Fit Finder added)
-- [x] `scrape_on3.py` updated to extract height, weight, birth year
-- [x] `load_real_data.py` updated to store physical attributes + real stat overrides
-- [ ] `scrape_cbb_reference.py` run complete — in progress
-- [ ] `scrape_on3.py` re-run to populate height/weight/birth year
-- [ ] `load_real_data.py` re-run with real stats + physical data
+- [x] Kaggle transfer portal data loaded (2021–2025)
+- [x] On3 transfer data scraped and loaded (2023–2025)
+- [x] Real BPM / TS% / USG% from CBB Reference (14,591 player-season rows, zero estimation)
+- [x] Context score model live — verdicts use absolute bpm_after, context_score used for ranking only
+- [x] 5 SQL views including materialized peer baseline (`tier_pair_expectations`)
+- [x] 581 fully scored transfers — all backed by real CBB Reference data
+- [x] Data cleaning: small-sample BPM nulled (< 8 games), duplicate transfers resolved, view Cartesian products fixed
+- [x] 6-tab Streamlit dashboard: Overview, Individual Scores, Team Portfolio, Recruit Profiles, Player Fit Finder, Coach Search
+- [x] Coach Search: Strong Match / Match tiers, USG%-based role projection, CBB Reference links
