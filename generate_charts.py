@@ -27,10 +27,11 @@ TIER_ORDER = ["high_major", "high_mid_major", "mid_major", "low_major"]
 TIER_DISPLAY = [TIER_LABELS[t] for t in TIER_ORDER]
 
 VERDICT_COLORS = {
-    "High Value":     "#2ecc71",
-    "Solid Addition": "#f39c12",
-    "Neutral":        "#95a5a6",
-    "Didn't Fit":     "#e74c3c",
+    "Exceeded Expectations": "#9b59b6",
+    "High Value":            "#2ecc71",
+    "Solid Addition":        "#f39c12",
+    "Neutral":               "#95a5a6",
+    "Didn't Fit":            "#e74c3c",
 }
 
 BG      = "#0e1117"

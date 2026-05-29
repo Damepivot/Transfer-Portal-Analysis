@@ -161,10 +161,13 @@ SELECT
     ppg_after,
     peer_group_size,
     ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) AS context_score,
-    -- Verdict uses absolute bpm_after so the bar is consistent across tiers.
-    -- context_score is a separate ranking metric (rewarding harder environments)
-    -- but does not determine whether a transfer "succeeded" or not.
+    -- Verdict: absolute bpm_after sets the floor; Exceeded Expectations also
+    -- requires beating the peer baseline by 2.5+ BPM and a context score >= 10.
     CASE
+        WHEN bpm_after >  2.0
+         AND ROUND(bpm_after - projected_bpm, 2) >= 2.5
+         AND ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) >= 10
+                              THEN 'Exceeded Expectations'
         WHEN bpm_after >  2.0 THEN 'High Value'
         WHEN bpm_after >  0.5 THEN 'Solid Addition'
         WHEN bpm_after > -0.5 THEN 'Neutral'

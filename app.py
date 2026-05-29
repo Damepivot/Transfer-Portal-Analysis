@@ -35,11 +35,13 @@ TIER_COLORS = {
 }
 
 VERDICT_COLORS = {
-    "High Value":      "#2ecc71",
-    "Solid Addition":  "#27ae60",
-    "Neutral":         "#f39c12",
-    "Didn't Fit":      "#e74c3c",
+    "Exceeded Expectations": "#9b59b6",
+    "High Value":            "#2ecc71",
+    "Solid Addition":        "#27ae60",
+    "Neutral":               "#f39c12",
+    "Didn't Fit":            "#e74c3c",
 }
+VERDICT_ORDER = ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"]
 
 # ── DB connection ─────────────────────────────────────────────────────────────
 def get_conn():
@@ -255,12 +257,13 @@ with tab2:
         its["to_tier_label"]   = its["to_tier"].map(TIER_LABELS)
 
         # Summary strip
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3, c4, c5 = st.columns(5)
         vc = its["transfer_verdict"].value_counts()
-        c1.metric("High Value",     vc.get("High Value", 0))
-        c2.metric("Solid Addition", vc.get("Solid Addition", 0))
-        c3.metric("Neutral",        vc.get("Neutral", 0))
-        c4.metric("Didn't Fit",     vc.get("Didn't Fit", 0))
+        c1.metric("Exceeded",       vc.get("Exceeded Expectations", 0))
+        c2.metric("High Value",     vc.get("High Value", 0))
+        c3.metric("Solid Addition", vc.get("Solid Addition", 0))
+        c4.metric("Neutral",        vc.get("Neutral", 0))
+        c5.metric("Didn't Fit",     vc.get("Didn't Fit", 0))
 
         col_l, col_r = st.columns([3, 2])
 
@@ -858,10 +861,11 @@ with tab5:
 
                 def color_verdict(val):
                     colors = {
-                        "High Value":      "#1a4731",
-                        "Solid Addition":  "#1a3d20",
-                        "Neutral":         "#3d3000",
-                        "Didn't Fit":      "#4a1010",
+                        "Exceeded Expectations": "#2d1a4a",
+                        "High Value":            "#1a4731",
+                        "Solid Addition":        "#1a3d20",
+                        "Neutral":               "#3d3000",
+                        "Didn't Fit":            "#4a1010",
                     }
                     return f"background-color: {colors.get(val, '')}"
 
@@ -910,8 +914,8 @@ with tab6:
         coach_season = st.selectbox("Season Focus", ["Any", "2023-24", "2024-25", "2022-23", "2021-22"], key="coach_season")
         coach_verdict = st.multiselect(
             "Minimum Verdict",
-            ["High Value", "Solid Addition", "Neutral", "Didn't Fit"],
-            default=["High Value", "Solid Addition"],
+            ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"],
+            default=["Exceeded Expectations", "High Value", "Solid Addition"],
             key="coach_verdict"
         )
     with c3:
@@ -1095,10 +1099,10 @@ with tab6:
                     role_ok  = (row["proj_usg"] >= usg_preset_min) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max)
                     proj_ok  = row["proj_usg"] >= coach_proj_usg_min
 
-                    bpm_close  = float(row["bpm_before"]   or 0) >= coach_bpm_min  - 1.5
-                    usg_close  = float(row["usage_before"] or 0) >= coach_usg_min  - 3.0
-                    role_close = (row["proj_usg"] >= usg_preset_min - 3.0) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max + 3.0)
-                    proj_close = row["proj_usg"] >= coach_proj_usg_min - 3.0
+                    bpm_close  = float(row["bpm_before"]   or 0) >= coach_bpm_min  - 3.0
+                    usg_close  = float(row["usage_before"] or 0) >= coach_usg_min  - 5.0
+                    role_close = (row["proj_usg"] >= usg_preset_min - 5.0) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max + 5.0)
+                    proj_close = row["proj_usg"] >= coach_proj_usg_min - 5.0
 
                     if bpm_ok and usg_ok and role_ok and proj_ok:
                         return "Strong Match"
@@ -1109,7 +1113,9 @@ with tab6:
                 results["match_quality"] = results.apply(classify_match, axis=1)
                 results = results[results["match_quality"].notna()].copy()
                 results["_sort"] = results["match_quality"].map({"Strong Match": 0, "Match": 1})
-                results = results.sort_values(["_sort", "context_score"], ascending=[True, False]).drop(columns=["_sort"])
+                verdict_rank = {"Exceeded Expectations": 0, "High Value": 1, "Solid Addition": 2, "Neutral": 3, "Didn't Fit": 4}
+                results["_vsort"] = results["transfer_verdict"].map(verdict_rank).fillna(5)
+                results = results.sort_values(["_sort", "_vsort", "context_score"], ascending=[True, True, False]).drop(columns=["_sort", "_vsort"])
 
                 if results.empty:
                     st.warning("No players match those filters. Try loosening BPM, USG%, or role preset.")
