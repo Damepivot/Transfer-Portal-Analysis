@@ -102,6 +102,9 @@ def main():
         mapped = CONF_MAP.get(raw_abbr, raw_abbr)
         return conf_by_abbr.get(mapped) or conf_by_name.get(mapped)
 
+    sub_d1_conf_id = conf_by_name.get("Sub-D1")  # catches JUCO/D2/D3 from_schools
+    sub_d1_team_cache: dict[str, int] = {}  # name → team_id (no season key; sub_d1 teams are season-agnostic)
+
     # ── Load CBB team stats → teams + team_seasons ────────────────────────────
     print("Loading team stats from CBB CSVs...")
     team_id_map   = {}   # (canonical_name, season) → team_id
@@ -219,18 +222,29 @@ def main():
         "UConn":                  "Connecticut",
         "UCF":                    "Central Florida",
         "UTEP":                   "Texas El Paso",
-        "UTSA":                   "UT San Antonio",
+        "UTSA":                   "UTSA",
         "VCU":                    "Virginia Commonwealth",
         "SMU":                    "Southern Methodist",
         "TCU":                    "Texas Christian",
         "BYU":                    "Brigham Young",
-        "LSU":                    "Louisiana State",
+        "LSU":                    "LSU",
         "Ole Miss":               "Mississippi",
         "Miami (FL)":             "Miami FL",
         "Miami (Ohio)":           "Miami OH",
+        "Miami (OH)":             "Miami OH",
         "Loyola (Chi) Ramblers":  "Loyola Chicago",
         "Loyola (Chi)":           "Loyola Chicago",
         "Loyola-Chicago":         "Loyola Chicago",
+        # CBB CSV uses these specific spellings
+        "NC State":               "North Carolina St.",
+        "North Carolina State":   "North Carolina St.",
+        "USF":                    "South Florida",
+        "Louisiana-Monroe":       "Louisiana Monroe",
+        "Louisiana":              "Louisiana Lafayette",
+        "Gardner-Webb":           "Gardner Webb",
+        "San Jose State":         "San Jose St.",
+        "UT Martin":              "Tennessee Martin",
+        "Nicholls State":         "Nicholls St.",
     }
 
     def normalize_school(raw: str) -> str:
@@ -253,6 +267,27 @@ def main():
         for name in all_team_names:
             if lower in name.lower() or name.lower() in lower:
                 return team_id_map.get((name, season))
+        return None
+
+    def get_or_create_sub_d1_team(raw: str) -> int | None:
+        """Return (or create) a season-agnostic sub_d1 team for JUCO/D2/D3 schools."""
+        if not raw or str(raw).strip().lower() in ("nan", "none", ""):
+            return None
+        name = str(raw).strip()
+        if name in sub_d1_team_cache:
+            return sub_d1_team_cache[name]
+        cur.execute(
+            "INSERT INTO teams (name, conference_id, season) VALUES (%s,%s,NULL)"
+            " ON CONFLICT DO NOTHING RETURNING team_id",
+            (name, sub_d1_conf_id)
+        )
+        row = cur.fetchone()
+        if not row:
+            cur.execute("SELECT team_id FROM teams WHERE name=%s AND season IS NULL LIMIT 1", (name,))
+            row = cur.fetchone()
+        if row:
+            sub_d1_team_cache[name] = row[0]
+            return row[0]
         return None
 
     # ── Load transfer portal CSV ──────────────────────────────────────────────
@@ -312,8 +347,9 @@ def main():
         to_name    = str(row.get("AftCollege", "")).strip()
 
         player_id  = player_id_map.get(name)
-        from_tid   = match_team(from_name, season)
         to_tid     = match_team(to_name, season)
+        # Try D1 match first; fall back to sub_d1 for JUCO/D2/D3 origins
+        from_tid   = match_team(from_name, season) or get_or_create_sub_d1_team(from_name)
 
         if not player_id or not from_tid or not to_tid or from_tid == to_tid:
             skipped += 1
@@ -327,6 +363,7 @@ def main():
         inserted_transfers += cur.rowcount
 
         # Structural placeholders — BPM filled exclusively by CBB Reference UPSERT, no estimation
+        # Only create ps_before placeholder for D1 from_schools (sub_d1 won't have CBB data)
         prev_seasons = [s for s in CBB_FILE_TO_SEASON.values() if s < season]
         if prev_seasons:
             prev_season = max(prev_seasons)
@@ -342,7 +379,7 @@ def main():
         )
 
     conn.commit()
-    print(f"  {inserted_transfers} transfers inserted, {skipped} skipped (unmatched schools)")
+    print(f"  {inserted_transfers} transfers inserted, {skipped} skipped (unmatched to_school)")
 
     # ── Load On3 transfers (2023-2025) ────────────────────────────────────────
     on3_path = DATA_DIR / "on3_transfers_combined.csv"
@@ -395,8 +432,9 @@ def main():
                     player_id_map[name] = r[0]
 
             player_id = player_id_map.get(name)
-            from_tid  = match_team(from_name, season)
             to_tid    = match_team(to_name, season)
+            # Try D1 match first; fall back to sub_d1 for JUCO/D2/D3 origins
+            from_tid  = match_team(from_name, season) or get_or_create_sub_d1_team(from_name)
 
             if not player_id or not from_tid or not to_tid or from_tid == to_tid:
                 on3_skipped += 1
@@ -409,7 +447,7 @@ def main():
             )
             on3_inserted += cur.rowcount
 
-            # Structural placeholders — BPM filled exclusively by CBB Reference UPSERT, no estimation
+            # Structural placeholders — only for D1 from_schools (sub_d1 has no CBB data)
             prev_seasons = [s for s in CBB_FILE_TO_SEASON.values() if s < season]
             if prev_seasons:
                 prev_season = max(prev_seasons)

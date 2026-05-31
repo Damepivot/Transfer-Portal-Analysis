@@ -2,7 +2,7 @@
 
 Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
 
-> **268 scored transfers · 100% real CBB Reference data · zero estimation · 2021–2025**
+> **541 scored transfers · 100% real CBB Reference data · zero estimation · 2021–2025 · JUCO/D2/D3 included**
 
 ---
 
@@ -53,6 +53,7 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 | `high_mid_major` | AAC, Mountain West, WCC, Atlantic 10 |
 | `mid_major` | MVC, MAC, CUSA, Sun Belt, CAA, Horizon, Big West, SoCon |
 | `low_major` | Big South, NEC, OVC, SWAC, MEAC, Patriot, America East, WAC, Ivy, ASUN |
+| `sub_d1` | JUCO, NCAA D2, NCAA D3, NAIA — any non-D1 origin |
 
 ---
 
@@ -251,6 +252,7 @@ Sidebar filters: season, position, destination tier.
 - [x] Context score model live — verdicts use absolute bpm_after, context_score used for ranking only
 - [x] 5 SQL views including materialized peer baseline (`tier_pair_expectations`)
 - [x] Data cleaning: small-sample BPM nulled (< 12 games), duplicate transfers resolved, view Cartesian products fixed
-- [x] 268 fully scored transfers across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
+- [x] 541 fully scored transfers across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
+- [x] JUCO/D2/D3/NAIA origin support via `sub_d1` tier — scores based on D1 destination BPM
 - [x] 6-tab Streamlit dashboard: Overview, Individual Scores, Team Portfolio, Recruit Profiles, Player Fit Finder, Coach Search
 - [x] Coach Search: Strong Match / Match tiers, USG%-based role projection, CBB Reference links

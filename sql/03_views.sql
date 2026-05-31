@@ -90,8 +90,9 @@ base AS (
             WHEN 'low_major'      THEN 0.75
             ELSE 1.0
         END AS tier_weight,
-        -- Role weight: credit for maintaining BPM in smaller role
+        -- Role weight: credit for maintaining BPM in smaller role (NULL usage_before = neutral)
         CASE
+            WHEN ps_before.usg_pct IS NULL                    THEN 1.0
             WHEN (ps_after.usg_pct - ps_before.usg_pct) < -5 THEN 1.20
             WHEN (ps_after.usg_pct - ps_before.usg_pct) < -2 THEN 1.10
             WHEN (ps_after.usg_pct - ps_before.usg_pct) >  5 THEN 0.85
@@ -104,8 +105,8 @@ base AS (
     -- Resolve school names first so subqueries below can reference t_from.name / t_to.name
     JOIN teams t_from ON tr.from_team_id = t_from.team_id
     JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
-    -- Pin to the player's most-recent season AT the from-school (matched by name across seasons)
-    JOIN player_seasons ps_before
+    -- LEFT JOIN: sub_d1 players have no pre-D1 CBB Reference data (ps_before will be NULL)
+    LEFT JOIN player_seasons ps_before
         ON tr.player_id = ps_before.player_id
         AND ps_before.team_id IN (SELECT team_id FROM teams WHERE name = t_from.name)
         AND ps_before.season = (
@@ -124,13 +125,13 @@ base AS (
         AND ps_after.team_id IN (SELECT team_id FROM teams WHERE name = t_to.name)
     JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
     JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
-    JOIN tier_pair_expectations tpe
+    -- LEFT JOIN: sub_d1 transfers won't have a peer baseline yet
+    LEFT JOIN tier_pair_expectations tpe
         ON  c_from.tier     = tpe.from_tier
         AND c_to.tier       = tpe.to_tier
         AND rb.recruit_tier = tpe.recruit_tier
         AND tpe.sample_size >= 5
-    WHERE ps_before.bpm IS NOT NULL
-      AND ps_after.bpm  IS NOT NULL
+    WHERE ps_after.bpm IS NOT NULL
 )
 SELECT
     transfer_id,
@@ -148,12 +149,12 @@ SELECT
     season,
     bpm_before,
     bpm_after,
-    ROUND(bpm_after - bpm_before, 2)                           AS bpm_change,
+    CASE WHEN bpm_before IS NOT NULL THEN ROUND(bpm_after - bpm_before, 2) END AS bpm_change,
     projected_bpm,
-    ROUND(bpm_after - projected_bpm, 2)                        AS transfer_premium,
+    CASE WHEN projected_bpm IS NOT NULL THEN ROUND(bpm_after - projected_bpm, 2) END AS transfer_premium,
     usage_before,
     usage_after,
-    ROUND(usage_after - usage_before, 1)                       AS usg_change,
+    CASE WHEN usage_before IS NOT NULL THEN ROUND(usage_after - usage_before, 1) END AS usg_change,
     efficiency_after,
     obpm_after,
     dbpm_after,
@@ -163,8 +164,10 @@ SELECT
     ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) AS context_score,
     -- Verdict: absolute bpm_after sets the floor; Exceeded Expectations also
     -- requires beating the peer baseline by 2.5+ BPM and a context score >= 10.
+    -- sub_d1 transfers (no peer baseline) can only reach High Value at most.
     CASE
         WHEN bpm_after >  2.0
+         AND projected_bpm IS NOT NULL
          AND ROUND(bpm_after - projected_bpm, 2) >= 2.5
          AND ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) >= 10
                               THEN 'Exceeded Expectations'

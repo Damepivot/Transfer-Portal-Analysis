@@ -26,12 +26,14 @@ TIER_LABELS = {
     "high_mid_major": "High Mid Major",
     "mid_major":      "Mid Major",
     "low_major":      "Low Major",
+    "sub_d1":         "Sub-D1 (JUCO/D2/D3)",
 }
 TIER_COLORS = {
-    "High Major":     "#1f4e79",
-    "High Mid Major": "#2e75b6",
-    "Mid Major":      "#9dc3e6",
-    "Low Major":      "#bdd7ee",
+    "High Major":           "#1f4e79",
+    "High Mid Major":       "#2e75b6",
+    "Mid Major":            "#9dc3e6",
+    "Low Major":            "#bdd7ee",
+    "Sub-D1 (JUCO/D2/D3)": "#d9b8f5",
 }
 
 VERDICT_COLORS = {
