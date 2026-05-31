@@ -289,7 +289,7 @@ def chart_verdict_donut():
         **LAYOUT,
         title=dict(text=f"Transfer Verdict Distribution  (n={df['n'].sum()})", font=dict(size=17)),
         showlegend=False,
-        annotations=[dict(text="581<br>transfers", x=0.5, y=0.5, font_size=16,
+        annotations=[dict(text=f"{df['n'].sum()}<br>transfers", x=0.5, y=0.5, font_size=16,
                           showarrow=False, font_color=TEXT)],
     )
     save(fig, "06_verdict_distribution", w=600, h=500)

@@ -2,7 +2,7 @@
 
 Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
 
-> **581 scored transfers · 100% real CBB Reference data · zero estimation**
+> **268 scored transfers · 100% real CBB Reference data · zero estimation · 2021–2025**
 
 ---
 
@@ -42,7 +42,7 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 
 ### Verdict Distribution
 ![Verdict distribution](assets/06_verdict_distribution.png)
-*Across all 581 scored transfers, 66.8% are High Value or Solid Addition. The model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from.*
+*Across all 268 scored transfers, the model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from. 61.2% of transfers rated High Value or better. Coverage spans 2021-22 through 2024-25.*
 
 ---
 
@@ -247,10 +247,10 @@ Sidebar filters: season, position, destination tier.
 - [x] CBB team stats loaded (cbb21–cbb26, 6 seasons)
 - [x] Kaggle transfer portal data loaded (2021–2025)
 - [x] On3 transfer data scraped and loaded (2023–2025)
-- [x] Real BPM / TS% / USG% from CBB Reference (14,591 player-season rows, zero estimation)
+- [x] Real BPM / TS% / USG% from CBB Reference (18,195 player-season rows, zero estimation)
 - [x] Context score model live — verdicts use absolute bpm_after, context_score used for ranking only
 - [x] 5 SQL views including materialized peer baseline (`tier_pair_expectations`)
-- [x] 581 fully scored transfers — all backed by real CBB Reference data
-- [x] Data cleaning: small-sample BPM nulled (< 8 games), duplicate transfers resolved, view Cartesian products fixed
+- [x] Data cleaning: small-sample BPM nulled (< 12 games), duplicate transfers resolved, view Cartesian products fixed
+- [x] 268 fully scored transfers across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
 - [x] 6-tab Streamlit dashboard: Overview, Individual Scores, Team Portfolio, Recruit Profiles, Player Fit Finder, Coach Search
 - [x] Coach Search: Strong Match / Match tiers, USG%-based role projection, CBB Reference links

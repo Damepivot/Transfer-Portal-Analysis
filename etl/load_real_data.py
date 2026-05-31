@@ -55,6 +55,7 @@ CBB_FILE_TO_SEASON = {
 
 # On3 portal year → season the player transfers INTO
 ON3_YEAR_TO_SEASON = {
+    2022: "2022-23",
     2023: "2023-24",
     2024: "2024-25",
     2025: "2025-26",
@@ -367,25 +368,31 @@ def main():
                 on3_skipped += 1
                 continue
 
-            # Insert player if new
-            if name not in player_id_map:
-                composite  = row["recruiting_composite"] if pd.notna(row.get("recruiting_composite")) else None
-                height_in  = parse_height_in(row.get("height")) if pd.notna(row.get("height", None) or float("nan")) else None
-                weight_lbs = int(row["weight"]) if pd.notna(row.get("weight")) and row.get("weight") else None
-                birth_year = int(row["birth_year"]) if pd.notna(row.get("birth_year")) and row.get("birth_year") else None
-                cur.execute(
-                    """INSERT INTO players (full_name, position, class_year, recruiting_composite, height_in, weight_lbs, birth_year)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT DO NOTHING RETURNING player_id""",
-                    (name, row["pos_clean"], str(row.get("class_year", ""))[:10] or None, composite, height_in, weight_lbs, birth_year)
-                )
-                result = cur.fetchone()
-                if result:
-                    player_id_map[name] = result[0]
-                else:
-                    cur.execute("SELECT player_id FROM players WHERE full_name=%s", (name,))
-                    r = cur.fetchone()
-                    if r:
-                        player_id_map[name] = r[0]
+            composite  = row["recruiting_composite"] if pd.notna(row.get("recruiting_composite")) else None
+            height_in  = parse_height_in(row.get("height")) if pd.notna(row.get("height", None) or float("nan")) else None
+            weight_lbs = int(row["weight"]) if pd.notna(row.get("weight")) and row.get("weight") else None
+            birth_year = int(row["birth_year"]) if pd.notna(row.get("birth_year")) and row.get("birth_year") else None
+
+            # Insert or update player — COALESCE ensures existing non-null values are never overwritten
+            cur.execute(
+                """INSERT INTO players (full_name, position, class_year, recruiting_composite, height_in, weight_lbs, birth_year)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (full_name) DO UPDATE SET
+                       recruiting_composite = COALESCE(players.recruiting_composite, EXCLUDED.recruiting_composite),
+                       height_in  = COALESCE(players.height_in,  EXCLUDED.height_in),
+                       weight_lbs = COALESCE(players.weight_lbs, EXCLUDED.weight_lbs),
+                       birth_year = COALESCE(players.birth_year, EXCLUDED.birth_year)
+                   RETURNING player_id""",
+                (name, row["pos_clean"], str(row.get("class_year", ""))[:10] or None, composite, height_in, weight_lbs, birth_year)
+            )
+            result = cur.fetchone()
+            if result:
+                player_id_map[name] = result[0]
+            elif name not in player_id_map:
+                cur.execute("SELECT player_id FROM players WHERE full_name=%s", (name,))
+                r = cur.fetchone()
+                if r:
+                    player_id_map[name] = r[0]
 
             player_id = player_id_map.get(name)
             from_tid  = match_team(from_name, season)
@@ -481,7 +488,7 @@ def main():
             usg_pct = parse_stat(row.get("USG%"))
             games   = int(row["G"]) if pd.notna(row.get("G")) else None
 
-            if bpm is None or abs(bpm) > 15:
+            if bpm is None or abs(bpm) > 15 or (games is not None and games < 12):
                 skipped_real += 1
                 continue
             if obpm is not None and abs(obpm) > 15:

@@ -1,17 +1,26 @@
 """
 Scrape On3 transfer portal for 2023, 2024, 2025 seasons.
 Data is embedded as __NEXT_DATA__ JSON in each page — no JS execution needed.
-Outputs: data/raw/on3_transfers_{year}.csv
 
+Two pass strategy:
+  1. Top-rated list (new format): up to 200 rated players per year with composites
+  2. Individual profile scrape for any DB player with NULL composite who has an On3 slug
+
+Outputs: data/raw/on3_transfers_{year}.csv, data/raw/on3_transfers_combined.csv
 Run: python etl/scrape_on3.py
 """
 
 import re
+import sys
 import time
 import json
 import requests
 import pandas as pd
+import psycopg2
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from db import DB_CONFIG
 
 OUTPUT_DIR = Path(__file__).parent.parent / "data" / "raw"
 HEADERS = {
@@ -20,11 +29,10 @@ HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     )
 }
-YEARS     = [2023, 2024, 2025]
-PAGE_SIZE = 50
+YEARS = [2022, 2023, 2024, 2025]
 
 
-def fetch_page(year: int, page: int) -> dict:
+def fetch_page(year: int, page: int = 1) -> dict:
     url = f"https://www.on3.com/transfer-portal/industry/basketball/{year}/"
     params = {"page": page} if page > 1 else {}
     resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
@@ -37,94 +45,146 @@ def fetch_page(year: int, page: int) -> dict:
     return json.loads(match.group(1))
 
 
-def extract_player(p: dict, year: int) -> dict | None:
-    name     = p.get("name", "").strip()
-    position = p.get("positionAbbreviation", "")
-    height   = p.get("height", "")
-    weight   = p.get("weight")
-
-    # Birth year from ISO date string e.g. "2003-05-15"
-    birth_date = p.get("birthDate") or p.get("birthday") or ""
-    birth_year = None
-    if birth_date:
-        try:
-            birth_year = int(str(birth_date)[:4])
-        except (ValueError, TypeError):
-            pass
-
-    # From school
-    last_team = p.get("lastTeam") or {}
-    from_school = last_team.get("name") or last_team.get("fullName") or ""
-    from_school = from_school.replace(" Wildcats","").replace(" Bulldogs","").strip()
-    from_school = last_team.get("name", from_school)
-
-    # To school — only if committed
-    commit = p.get("commitStatus") or {}
-    to_org  = commit.get("committedOrganization") or {}
-    to_school = to_org.get("name") or to_org.get("fullName") or ""
-
-    if not from_school:
+def extract_from_toplist(entry: dict, year: int, history_map: dict) -> dict | None:
+    player = entry.get("player") or {}
+    name   = player.get("fullName", "").strip()
+    if not name:
         return None
 
-    # Recruiting composite (On3 scale 0-100)
-    transfer_rating = p.get("transferRating") or {}
-    composite = transfer_rating.get("consensusRating") or transfer_rating.get("rating")
+    slug   = player.get("slug") or ""
+    height = player.get("height") or ""
+    weight = player.get("weight")
+    pos    = (player.get("position") or {}).get("abbreviation") or \
+             (player.get("position") or {}).get("name") or ""
 
-    # Class / eligibility
-    eligibility = (p.get("eligibility") or {}).get("label") or \
-                  (commit.get("classRank") or "")
+    # Transfer composite
+    tr        = entry.get("transferRating") or {}
+    composite = tr.get("consensusRating") or tr.get("rating")
 
-    if p.get("withdrawnTransfer"):
-        to_school = ""
+    # Committed status and to_school — live in entry.status
+    status    = entry.get("status") or {}
+    committed = status.get("type") == "Committed"
+    to_asset  = status.get("committedAsset") or {}
+    to_school = to_asset.get("name", "").strip()
+
+    # from_school — look up by player.key in history_map (keyed by player key as str)
+    player_key  = str(player.get("key") or "")
+    from_school = ""
+    history     = history_map.get(player_key, [])
+    if history:
+        by_year = sorted(history, key=lambda h: h.get("startYear") or 0)
+        # The entry before the most recent transfer is the origin school
+        colleges = [h for h in by_year if (h.get("team") or {}).get("name")]
+        if len(colleges) >= 2:
+            from_school = (colleges[-2].get("team") or {}).get("name", "").strip()
+        elif colleges:
+            from_school = (colleges[-1].get("team") or {}).get("name", "").strip()
 
     return {
         "player_name":          name,
-        "position":             position,
+        "on3_slug":             slug,
+        "position":             pos,
         "height":               height,
         "weight":               int(weight) if weight else None,
-        "birth_year":           birth_year,
-        "from_school":          from_school.strip(),
-        "to_school":            to_school.strip(),
-        "recruiting_composite": round(composite, 2) if composite else None,
-        "class_year":           str(eligibility)[:10] if eligibility else None,
+        "birth_year":           None,
+        "from_school":          from_school,
+        "to_school":            to_school,
+        "recruiting_composite": round(float(composite), 2) if composite else None,
+        "class_year":           None,
         "year":                 year,
-        "committed":            commit.get("type") == "Committed",
+        "committed":            committed,
     }
 
 
 def scrape_year(year: int) -> pd.DataFrame:
     print(f"\nScraping {year}...")
-    # Get first page to find total count
-    data       = fetch_page(year, 1)
-    player_data = data["props"]["pageProps"]["playerData"]
-    total      = player_data["pagination"]["count"]
-    pages      = -(-total // PAGE_SIZE)   # ceiling division
-    print(f"  {total} players across {pages} pages")
+    data = fetch_page(year, 1)
+    pp   = data.get("props", {}).get("pageProps", {})
 
-    records = []
-    for p in player_data["list"]:
-        rec = extract_player(p, year)
-        if rec:
-            records.append(rec)
+    top_list    = pp.get("topList", [])
+    history_map = pp.get("transferHistoryByPlayerKey", {})
+    total       = (pp.get("relatedModel") or {}).get("playersEnteredCount", len(top_list))
+    print(f"  Portal shows {total} total entrants; fetching rated players across pages")
 
-    for page in range(2, pages + 1):
-        time.sleep(0.8)   # be polite
+    records   = []
+    seen_keys = set()
+
+    def process_entries(entries):
+        for entry in entries:
+            pk = entry.get("psoKey")
+            if pk in seen_keys:
+                continue
+            seen_keys.add(pk)
+            rec = extract_from_toplist(entry, year, history_map)
+            if rec:
+                records.append(rec)
+
+    process_entries(top_list)
+
+    # Paginate — On3 returns the same top-50 rated on each page if structure is new;
+    # keep fetching until we get a duplicate first entry or hit page 20.
+    for page in range(2, 21):
+        time.sleep(0.8)
         try:
-            data = fetch_page(year, page)
-            players = data["props"]["pageProps"]["playerData"]["list"]
-            for p in players:
-                rec = extract_player(p, year)
-                if rec:
-                    records.append(rec)
+            d2   = fetch_page(year, page)
+            pp2  = d2.get("props", {}).get("pageProps", {})
+            tl2  = pp2.get("topList", [])
+            hm2  = pp2.get("transferHistoryByPlayerKey", {})
+            if not tl2:
+                break
+            first_pk = tl2[0].get("psoKey")
+            if first_pk in seen_keys and page > 2:
+                # All pages returning same results — new On3 format caps at 50 rated
+                break
+            history_map.update(hm2)
+            process_entries(tl2)
             if page % 5 == 0:
-                print(f"  page {page}/{pages} — {len(records)} records so far")
+                print(f"  page {page} — {len(records)} records so far")
         except Exception as e:
             print(f"  page {page} error: {e}")
-            continue
+            break
 
     df = pd.DataFrame(records)
-    print(f"  Done: {len(df)} records, {df['committed'].sum()} committed")
+    if df.empty:
+        return df
+
+    # Keep only columns matching the old format for load_real_data.py compatibility
+    keep = ["player_name", "on3_slug", "position", "height", "weight",
+            "birth_year", "from_school", "to_school", "recruiting_composite",
+            "class_year", "year", "committed"]
+    df = df[[c for c in keep if c in df.columns]]
+    print(f"  Done: {len(df)} records, {df['committed'].sum()} committed, "
+          f"{df['recruiting_composite'].notna().sum()} with composite")
     return df
+
+
+def backfill_composites_from_csv(combined_csv: Path) -> int:
+    """Update DB players with NULL composite using the latest On3 CSV data."""
+    if not combined_csv.exists():
+        return 0
+    df = pd.read_csv(combined_csv)
+    df = df[df["recruiting_composite"].notna()].copy()
+    df["name_clean"] = df["player_name"].str.strip().str.title().str.lower()
+    best = df.sort_values("recruiting_composite", ascending=False).drop_duplicates("name_clean")
+
+    conn = psycopg2.connect(**DB_CONFIG)
+    cur  = conn.cursor()
+    cur.execute("SELECT player_id, LOWER(TRIM(full_name)) FROM players WHERE recruiting_composite IS NULL")
+    null_map = {row[1]: row[0] for row in cur.fetchall()}
+
+    updated = 0
+    for _, row in best.iterrows():
+        pid = null_map.get(row["name_clean"])
+        if pid:
+            cur.execute(
+                "UPDATE players SET recruiting_composite = %s WHERE player_id = %s",
+                (round(float(row["recruiting_composite"]), 2), pid)
+            )
+            updated += 1
+
+    conn.commit()
+    cur.close(); conn.close()
+    return updated
 
 
 def main():
@@ -133,16 +193,24 @@ def main():
 
     for year in YEARS:
         df = scrape_year(year)
-        out_path = OUTPUT_DIR / f"on3_transfers_{year}.csv"
-        df.to_csv(out_path, index=False)
-        print(f"  Saved to {out_path.name}")
-        all_frames.append(df)
+        if not df.empty:
+            out_path = OUTPUT_DIR / f"on3_transfers_{year}.csv"
+            df.to_csv(out_path, index=False)
+            print(f"  Saved → {out_path.name}")
+            all_frames.append(df)
+
+    if not all_frames:
+        print("No data scraped.")
+        return
 
     combined = pd.concat(all_frames, ignore_index=True)
     combined_path = OUTPUT_DIR / "on3_transfers_combined.csv"
     combined.to_csv(combined_path, index=False)
     print(f"\nCombined: {len(combined)} rows → {combined_path.name}")
-    print(combined[["year","from_school","to_school","committed"]].value_counts("year"))
+
+    print("\nBackfilling composite values into DB...")
+    n = backfill_composites_from_csv(combined_path)
+    print(f"  Updated {n} players with composite from fresh On3 data")
 
 
 if __name__ == "__main__":

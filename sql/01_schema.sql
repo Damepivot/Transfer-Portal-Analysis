@@ -19,7 +19,7 @@ CREATE TABLE teams (
 
 CREATE TABLE players (
     player_id             SERIAL PRIMARY KEY,
-    full_name             VARCHAR(100) NOT NULL,
+    full_name             VARCHAR(100) NOT NULL UNIQUE,
     position              VARCHAR(5),         -- G, G/F, F, F/C, C
     height_in             INT,
     class_year            VARCHAR(10),        -- FR, SO, JR, SR, Grad

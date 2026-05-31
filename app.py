@@ -135,14 +135,15 @@ with tab1:
             COUNT(*)                                          AS total_transfers,
             COUNT(DISTINCT t.player_id)                      AS unique_players,
             COUNT(DISTINCT t.to_team_id)                     AS destination_teams,
-            ROUND(AVG(ps.ppg)::numeric, 1)                   AS avg_ppg,
+            ROUND(AVG(ps.usg_pct)::numeric, 1)               AS avg_usg,
             ROUND(AVG(ps.bpm)::numeric, 2)                   AS avg_bpm
         FROM transfers t
         JOIN players p       ON t.player_id = p.player_id
-        JOIN player_seasons ps ON t.player_id = ps.player_id AND ps.season = t.season
         JOIN teams t_to      ON t.to_team_id = t_to.team_id
         JOIN conferences c_to ON t_to.conference_id = c_to.conference_id
-        {where.replace("tr.season", "t.season").replace("p.position", "p.position").replace("c_to.tier", "c_to.tier")}
+        LEFT JOIN player_seasons ps ON t.player_id = ps.player_id
+            AND ps.season = t.season AND ps.team_id = t.to_team_id
+        {where.replace("tr.season", "t.season").replace("c_to.tier", "c_to.tier")}
     """
     try:
         kpi = query(kpi_sql, params)
@@ -150,8 +151,8 @@ with tab1:
         c1.metric("Total Transfers", f"{int(kpi['total_transfers'][0]):,}")
         c2.metric("Unique Players", f"{int(kpi['unique_players'][0]):,}")
         c3.metric("Destination Schools", f"{int(kpi['destination_teams'][0]):,}")
-        c4.metric("Avg PPG (post-transfer)", kpi['avg_ppg'][0])
-        c5.metric("Avg BPM (post-transfer)", kpi['avg_bpm'][0])
+        c4.metric("Avg USG% (post-transfer)", f"{kpi['avg_usg'][0] or '—'}%")
+        c5.metric("Avg BPM (post-transfer)", kpi['avg_bpm'][0] or "—")
     except Exception:
         st.info("Load data to see KPIs.")
 
@@ -164,8 +165,8 @@ with tab1:
         st.subheader("Transfer Flow by Tier")
         flow_sql = f"""
             SELECT
-                COALESCE(NULLIF(c_from.tier,''), 'unknown') AS from_tier,
-                c_to.tier                                   AS to_tier,
+                c_from.tier::text AS from_tier,
+                c_to.tier::text   AS to_tier,
                 COUNT(*)                                    AS transfers
             FROM transfers tr
             JOIN players p       ON tr.player_id    = p.player_id
@@ -793,7 +794,7 @@ with tab5:
                         avg_premium=("transfer_premium", "mean"),
                         avg_bpm_after=("bpm_after", "mean"),
                         count=("transfer_id", "count"),
-                        pct_outperformed=("transfer_verdict", lambda x: round((x == "Outperformed").mean() * 100, 1)),
+                        pct_outperformed=("transfer_verdict", lambda x: round((x == "Exceeded Expectations").mean() * 100, 1)),
                     )
                     .reset_index()
                     .sort_values("avg_premium", ascending=False)
