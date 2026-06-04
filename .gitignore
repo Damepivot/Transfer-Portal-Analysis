@@ -38,3 +38,6 @@ experiments/
 
 # Stray files
 =
+
+# Database dumps
+*_dump.sql
