@@ -1,10 +1,22 @@
 """
-Scrape On3 transfer portal for 2023, 2024, 2025 seasons.
-Data is embedded as __NEXT_DATA__ JSON in each page — no JS execution needed.
+Scrape the On3 transfer portal rated player list (top ~50 per year).
 
-Two pass strategy:
-  1. Top-rated list (new format): up to 200 rated players per year with composites
-  2. Individual profile scrape for any DB player with NULL composite who has an On3 slug
+How it works:
+  On3 embeds all page data as JSON in a <script id="__NEXT_DATA__"> tag.
+  No browser / JS execution needed — just parse the JSON from the raw HTML.
+
+  The main portal page (on3.com/transfer-portal/industry/basketball/{year}/)
+  contains two key fields in pageProps:
+    topList     — the top-rated portal entrants (with composite scores)
+    transferHistoryByPlayerKey — each player's college history (used to find from_school)
+
+  NOTE: On3 changed their format in ~2023. The old format had a paginated
+  playerData.list with all entrants. The new format caps topList at ~50
+  rated players per year. Unrated players are NOT here — see scrape_on3_team_pages.py.
+
+Two-pass strategy:
+  1. Scrape topList for each year → ratings, to_school, from_school (from history)
+  2. Backfill NULL composites for players already in the DB who have On3 slugs
 
 Outputs: data/raw/on3_transfers_{year}.csv, data/raw/on3_transfers_combined.csv
 Run: python etl/scrape_on3.py
@@ -33,6 +45,7 @@ YEARS = [2022, 2023, 2024, 2025]
 
 
 def fetch_page(year: int, page: int = 1) -> dict:
+    """Fetch one page of the On3 portal and return the __NEXT_DATA__ JSON dict."""
     url = f"https://www.on3.com/transfer-portal/industry/basketball/{year}/"
     params = {"page": page} if page > 1 else {}
     resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
@@ -46,6 +59,13 @@ def fetch_page(year: int, page: int = 1) -> dict:
 
 
 def extract_from_toplist(entry: dict, year: int, history_map: dict) -> dict | None:
+    """
+    Parse one topList entry into a flat record dict.
+
+    from_school is derived from transferHistoryByPlayerKey — On3 stores a player's
+    full college history there, sorted by startYear. The second-to-last school is
+    the origin (the last is where they transferred to).
+    """
     player = entry.get("player") or {}
     name   = player.get("fullName", "").strip()
     if not name:
@@ -57,7 +77,7 @@ def extract_from_toplist(entry: dict, year: int, history_map: dict) -> dict | No
     pos    = (player.get("position") or {}).get("abbreviation") or \
              (player.get("position") or {}).get("name") or ""
 
-    # Transfer composite
+    # Transfer composite — consensusRating is the blended On3 score (0–100)
     tr        = entry.get("transferRating") or {}
     composite = tr.get("consensusRating") or tr.get("rating")
 
@@ -97,6 +117,14 @@ def extract_from_toplist(entry: dict, year: int, history_map: dict) -> dict | No
 
 
 def scrape_year(year: int) -> pd.DataFrame:
+    """
+    Scrape all rated portal entrants for one year.
+
+    The portal shows how many total players entered (playersEnteredCount), but
+    only the top ~50 rated are available in topList. We paginate anyway in case
+    On3 ever re-enables full pagination — the duplicate-key guard (seen_keys)
+    stops the loop when pages repeat.
+    """
     print(f"\nScraping {year}...")
     data = fetch_page(year, 1)
     pp   = data.get("props", {}).get("pageProps", {})
@@ -159,7 +187,7 @@ def scrape_year(year: int) -> pd.DataFrame:
 
 
 def backfill_composites_from_csv(combined_csv: Path) -> int:
-    """Update DB players with NULL composite using the latest On3 CSV data."""
+    """Push On3 composite ratings from the CSV into the DB for any player with NULL composite."""
     if not combined_csv.exists():
         return 0
     df = pd.read_csv(combined_csv)

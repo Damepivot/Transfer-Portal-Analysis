@@ -30,11 +30,14 @@ from playwright.sync_api import sync_playwright
 OUTPUT_PATH = Path(__file__).parent.parent / "data" / "raw" / "barttorvik_transfers.csv"
 
 YEAR_TO_SEASON = {
-    2022: "2021-22",
-    2023: "2022-23",
-    2024: "2023-24",
-    2025: "2024-25",
-    2026: "2025-26",
+    # Barttorvik year=YYYY shows portal entries FROM the YYYY-1/YYYY season.
+    # Players play at their new school the FOLLOWING season (year → year+1 format).
+    # Exception: year=2026 entries are current-season players already playing 2025-26.
+    2022: "2022-23",
+    2023: "2023-24",
+    2024: "2024-25",
+    2025: "2025-26",
+    2026: "2025-26",  # current season — players already playing
 }
 
 # Date ranges for each season (used in the URL filter)

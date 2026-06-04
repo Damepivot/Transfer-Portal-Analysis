@@ -29,3 +29,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Internal dev / autoresearch tooling
+autoresearch.jsonl
+autoresearch.md
+autoresearch.sh
+experiments/
+
+# Stray files
+=

@@ -1,3 +1,8 @@
+"""
+Shared database connection config.
+All ETL scripts and the dashboard import DB_CONFIG from here.
+Credentials come from .env (gitignored) — never hardcoded.
+"""
 import os
 from pathlib import Path
 from dotenv import load_dotenv

@@ -1016,6 +1016,16 @@ def main():
             except (ValueError, TypeError):
                 return None
 
+        # Build last-name → list of (player_id, full_name) for fuzzy fallback
+        # If exact full-name match fails, match on (last_name, school) — catches
+        # apostrophe/hyphen/period differences like "D'Shawn" vs "Dshawn"
+        lastname_to_pids: dict[str, list[tuple[int, str]]] = {}
+        for full_name_lower, pid in name_to_pid.items():
+            parts = full_name_lower.strip().split()
+            if parts:
+                ln = parts[-1]
+                lastname_to_pids.setdefault(ln, []).append((pid, full_name_lower))
+
         upserted = skipped_real = 0
         for _, row in cbb_df.iterrows():
             player_name = str(row["Player"]).strip()
@@ -1023,6 +1033,29 @@ def main():
             season      = str(row["season"]).strip()
 
             pid = name_to_pid.get(player_name.lower())
+            if not pid:
+                # Last-name fallback: if a transfer player has the same last name
+                # and is at the same school this season, trust the match
+                last = player_name.lower().split()[-1] if player_name else ""
+                candidates = [
+                    p for p, fn in lastname_to_pids.get(last, [])
+                    if p in transfer_pids
+                ]
+                if len(candidates) == 1:
+                    pid = candidates[0]
+                elif len(candidates) > 1:
+                    # Multiple transfer players with same last name — require school match
+                    # via checking existing player_seasons for (pid, school, season)
+                    for cand_pid in candidates:
+                        to_tid_check = match_team(school, season)
+                        if to_tid_check:
+                            cur.execute(
+                                "SELECT 1 FROM player_seasons WHERE player_id=%s AND team_id=%s AND season=%s LIMIT 1",
+                                (cand_pid, to_tid_check, season)
+                            )
+                            if cur.fetchone():
+                                pid = cand_pid
+                                break
             if not pid or pid not in transfer_pids:
                 skipped_real += 1
                 continue

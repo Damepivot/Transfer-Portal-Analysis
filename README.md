@@ -2,7 +2,7 @@
 
 Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
 
-> **541 scored transfers · 100% real CBB Reference data · zero estimation · 2021–2025 · JUCO/D2/D3 included**
+> **1,038 scored transfers · 1,859 total transfers · 100% real CBB Reference data · zero estimation · 2021–2025 · JUCO/D2/D3/International included**
 
 ---
 
@@ -12,19 +12,19 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 
 ### Transfer Success Rate by Tier Movement
 ![Tier heatmap](assets/01_tier_heatmap.png)
-*Every cell shows the success rate and sample size for that origin → destination tier pair. The top-left (High Major → High Major) is the most active route at 83.7%. Mid-major lateral moves (center) are 0% — the worst route in the dataset.*
+*Every cell shows the success rate and sample size for that origin → destination tier pair. High Major → High Major is the most active route (n=311, 69.1%). High Major → Mid Major is the weakest at 42.1% — the largest downgrade in success rate for any high-volume route.*
 
 ---
 
 ### High-Major Success Rate by Origin Tier
 ![Origin tier success](assets/02_origin_tier_success.png)
-*All four origin tiers produce above a 73% success rate at high-major destinations — but the gap between high-mid major (81.9%) and mid-major (73.2%) is meaningful. Low-major step-ups (80.6%) outperform mid-major laterals by a wide margin.*
+*At high-major destinations, low-major (74.4%) and mid-major (69.7%) step-ups slightly outperform same-tier high-major laterals (69.1%). High-mid major transfers (67.1%) are the weakest, suggesting over-competition relative to expectation at high-major programs.*
 
 ---
 
 ### Top 15 Transfers by Context Score
 ![Top transfers](assets/03_top_transfers.png)
-*Context score = `bpm_after × tier_weight × role_weight`. It rewards performing at a high level in a harder environment with a smaller role. Maliq Brown (Syracuse → Duke) and Chris Manon (Cornell → Vanderbilt) lead the dataset.*
+*Context score = `bpm_after × tier_weight × role_weight`. It rewards performing at a high level in a harder environment with a smaller role. Walker Kessler (North Carolina → Auburn, ctx=20.9), Oscar Tshiebwe (West Virginia → Kentucky, 18.0), and Tari Eason (Cincinnati → LSU, 16.9) lead the dataset — all moved to high-major programs and exceeded expectations.*
 
 ---
 
@@ -42,7 +42,7 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 
 ### Verdict Distribution
 ![Verdict distribution](assets/06_verdict_distribution.png)
-*Across all 268 scored transfers, the model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from. 61.2% of transfers rated High Value or better. Coverage spans 2021-22 through 2024-25.*
+*Across all 1,038 scored transfers, the model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from. Coverage spans 2021-22 through 2024-25.*
 
 ---
 
@@ -53,7 +53,8 @@ Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era).
 | `high_mid_major` | AAC, Mountain West, WCC, Atlantic 10 |
 | `mid_major` | MVC, MAC, CUSA, Sun Belt, CAA, Horizon, Big West, SoCon |
 | `low_major` | Big South, NEC, OVC, SWAC, MEAC, Patriot, America East, WAC, Ivy, ASUN |
-| `sub_d1` | JUCO, NCAA D2, NCAA D3, NAIA — any non-D1 origin |
+| `sub_d1` | JUCO, NCAA D2, NCAA D3, NAIA — any non-D1 domestic origin |
+| `international` | Players from foreign professional or semi-pro leagues (Europe, FIBA circuits) |
 
 ---
 
@@ -145,9 +146,11 @@ Height and weight are included in all views for correlation analysis. Once re-sc
 | Data | Source | Method |
 |------|--------|--------|
 | Transfer records 2016–2022 | Kaggle (`collegeBasketBallTransferMen.csv`) | Downloaded via Kaggle CLI |
-| Transfer records 2023–2025 | On3 transfer portal | `etl/scrape_on3.py` |
+| Transfer records 2022–2025 (top 50 rated/year) | On3 portal main page | `etl/scrape_on3.py` |
+| Transfer records 2022–2025 (all entrants) | On3 school team pages | `etl/scrape_on3_team_pages.py` — 2,940 records |
+| International transfers | Manual CSV + On3 topList | `data/international_transfers.csv` |
 | Team stats (wins, ADJOE) | College Basketball Reference CSVs | `data/raw/cbb21.csv` – `cbb26.csv` |
-| Real player BPM / TS% / USG% | CBB Reference school pages | `etl/scrape_cbb_reference.py` |
+| Real player BPM / TS% / USG% | CBB Reference school pages | `etl/scrape_cbb_reference.py` — 20,267 player-season rows, 329 schools |
 | Height / weight / birth year | On3 (re-scrape) | `etl/scrape_on3.py` (updated) |
 | Conference tiers | Manual seed CSV | `data/conferences_seed.csv` |
 
@@ -162,16 +165,19 @@ TransferPortal/
 │   └── 03_views.sql               ← 5 analytical views (incl. materialized)
 ├── etl/
 │   ├── seed_synthetic.py          ← synthetic data for model validation
-│   ├── scrape_on3.py              ← scrapes On3 portal (now includes height/weight/birth year)
-│   ├── scrape_cbb_reference.py    ← scrapes real BPM/TS%/USG% per school-season
+│   ├── scrape_on3.py              ← scrapes On3 topList (top 50 rated/year) for composites
+│   ├── scrape_on3_team_pages.py   ← scrapes On3 school pages for ALL portal entrants (2,940 records)
+│   ├── scrape_cbb_reference.py    ← scrapes real BPM/TS%/USG% per school-season (329 schools)
 │   └── load_real_data.py          ← master ETL: team stats → transfers → real stat overrides
 ├── data/
 │   ├── conferences_seed.csv       ← static tier lookup (31 conferences)
+│   ├── international_transfers.csv ← manually curated international-to-NCAA transfers
 │   └── raw/
-│       ├── cbb21.csv – cbb26.csv  ← team stats per season
-│       ├── collegeBasketBallTransferMen.csv  ← Kaggle portal data
-│       ├── on3_transfers_combined.csv        ← On3 scraper output
-│       └── cbb_player_stats.csv             ← CBB Reference real player stats
+│       ├── cbb21.csv – cbb26.csv          ← team stats per season
+│       ├── collegeBasketBallTransferMen.csv ← Kaggle portal data
+│       ├── on3_transfers_combined.csv      ← On3 topList scraper output
+│       ├── on3_transfers_full.csv          ← On3 team-page scraper output (2,940 records)
+│       └── cbb_player_stats.csv           ← CBB Reference real player stats (20,267 rows)
 ├── app.py                         ← 6-tab Streamlit dashboard
 ├── db.py                          ← shared DB connection config (reads .env)
 ├── requirements.txt
@@ -211,16 +217,19 @@ cp .env.example .env
 # 2. Install dependencies and create the database
 bash setup.sh
 
-# 3. Scrape On3 portal data — includes height, weight, birth year
+# 3. Scrape On3 top-rated portal entrants (composites, height, weight, birth year)
 python3 etl/scrape_on3.py
 
-# 4. Scrape real player stats from CBB Reference (~35 min, resumable)
+# 4. Scrape ALL portal entrants from On3 school pages (~90 min, resumable)
+python3 etl/scrape_on3_team_pages.py
+
+# 5. Scrape real player stats from CBB Reference (~60 min, resumable)
 python3 etl/scrape_cbb_reference.py
 
-# 5. Load all data into PostgreSQL
+# 6. Load all data into PostgreSQL
 python3 etl/load_real_data.py
 
-# 6. Launch dashboard
+# 7. Launch dashboard
 streamlit run app.py
 ```
 
@@ -244,15 +253,17 @@ Sidebar filters: season, position, destination tier.
 
 ## Current Status
 - [x] PostgreSQL schema with height, weight, birth year, recruiting composite
-- [x] 31 conferences seeded across 4 tiers
+- [x] 32 conferences seeded across 5 tiers (including `sub_d1` and `international`)
 - [x] CBB team stats loaded (cbb21–cbb26, 6 seasons)
 - [x] Kaggle transfer portal data loaded (2021–2025)
-- [x] On3 transfer data scraped and loaded (2023–2025)
-- [x] Real BPM / TS% / USG% from CBB Reference (18,195 player-season rows, zero estimation)
+- [x] On3 topList scraped for composites (top 50 rated/year, 2022–2025)
+- [x] **Full portal coverage**: On3 school team pages scraped — 2,940 unique player-year records
+- [x] **International player support**: 19 international-to-NCAA transfers tracked, scored on D1 BPM at destination
+- [x] Real BPM / TS% / USG% from CBB Reference (20,267 player-season rows, 329 schools, zero estimation)
 - [x] Context score model live — verdicts use absolute bpm_after, context_score used for ranking only
 - [x] 5 SQL views including materialized peer baseline (`tier_pair_expectations`)
 - [x] Data cleaning: small-sample BPM nulled (< 12 games), duplicate transfers resolved, view Cartesian products fixed
-- [x] 541 fully scored transfers across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
+- [x] **1,038 fully scored transfers** across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
 - [x] JUCO/D2/D3/NAIA origin support via `sub_d1` tier — scores based on D1 destination BPM
 - [x] 6-tab Streamlit dashboard: Overview, Individual Scores, Team Portfolio, Recruit Profiles, Player Fit Finder, Coach Search
 - [x] Coach Search: Strong Match / Match tiers, USG%-based role projection, CBB Reference links
