@@ -677,28 +677,28 @@ with tabX:
 
         with col_prod:
             st.subheader("🏫 Schools That Produce")
-            st.caption("Programs players left. Their transfers went on to outperform.")
+            st.caption("Programs players left. Ranked by median BPM at their next school — more resistant to one outlier season than the average.")
             origin_df = query("""
                 SELECT from_school, from_tier, COUNT(*) as n,
-                    ROUND(AVG(bpm_after)::numeric,2) as avg_bpm,
+                    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
                         ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                   AND from_tier NOT IN ('sub_d1','international')
                 GROUP BY from_school, from_tier HAVING COUNT(*) >= 8  -- 8 transfers minimum per school
-                ORDER BY avg_bpm DESC LIMIT 15
+                ORDER BY median_bpm DESC LIMIT 15
             """)
             origin_df["tier_label"] = origin_df["from_tier"].map(TIER_LABELS)
             fig_orig = px.bar(
-                origin_df.sort_values("avg_bpm"),
-                x="avg_bpm", y="from_school",
+                origin_df.sort_values("median_bpm"),
+                x="median_bpm", y="from_school",
                 color="hv_pct",
                 color_continuous_scale=["#333333","#FF8C38","#FF6B00"],
                 range_color=[40, 100],
                 orientation="h",
-                text="avg_bpm",
-                labels={"avg_bpm": "Avg BPM After Transfer", "from_school": "", "hv_pct": "HV%"},
+                text="median_bpm",
+                labels={"median_bpm": "Median BPM After Transfer", "from_school": "", "hv_pct": "HV%"},
             )
             fig_orig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.3)
             fig_orig.update_traces(texttemplate="%{text:+.1f}", textposition="outside")
@@ -707,7 +707,7 @@ with tabX:
 
             worst_origin_df = query("""
                 SELECT from_school, COUNT(*) as n,
-                    ROUND(AVG(bpm_after)::numeric,2) as avg_bpm,
+                    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
                         ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit'
@@ -716,38 +716,38 @@ with tabX:
                 WHERE to_tier NOT IN ('sub_d1','international')
                   AND from_tier NOT IN ('sub_d1','international')
                 GROUP BY from_school HAVING COUNT(*) >= 8  -- 8 minimum so one bad season doesn't tank a school
-                ORDER BY avg_bpm ASC LIMIT 10
+                ORDER BY median_bpm ASC LIMIT 10
             """)
             with st.expander("Worst Starter Schools"):
                 st.caption("Players left these programs and struggled at their next stop.")
                 for _, r in worst_origin_df.iterrows():
                     st.markdown(
-                        f"- **{r['from_school']}** — {float(r['avg_bpm']):+.1f} avg BPM · "
+                        f"- **{r['from_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
                         f"{r['hv_pct']}% High Value · {r['fail_pct']}% Didn't Fit · n={int(r['n'])}"
                     )
 
         with col_dev:
             st.subheader("🧲 Schools That Develop")
-            st.caption("Programs where transfers land and post better numbers than they had before.")
+            st.caption("Programs where transfers land and produce. Ranked by median BPM — one standout season doesn't carry the whole school.")
             dest_df = query("""
                 SELECT to_school, to_tier, COUNT(*) as n,
-                    ROUND(AVG(bpm_after)::numeric,2) as avg_bpm,
+                    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
                         ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                 GROUP BY to_school, to_tier HAVING COUNT(*) >= 8  -- 8 minimum per destination school
-                ORDER BY avg_bpm DESC LIMIT 15
+                ORDER BY median_bpm DESC LIMIT 15
             """)
             fig_dest = px.bar(
-                dest_df.sort_values("avg_bpm"),
-                x="avg_bpm", y="to_school",
+                dest_df.sort_values("median_bpm"),
+                x="median_bpm", y="to_school",
                 color="hv_pct",
                 color_continuous_scale=["#333333","#FF8C38","#FF6B00"],
                 range_color=[60, 100],
                 orientation="h",
-                text="avg_bpm",
-                labels={"avg_bpm": "Avg BPM After Arriving", "to_school": "", "hv_pct": "HV%"},
+                text="median_bpm",
+                labels={"median_bpm": "Median BPM After Arriving", "to_school": "", "hv_pct": "HV%"},
             )
             fig_dest.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.3)
             fig_dest.update_traces(texttemplate="%{text:+.1f}", textposition="outside")
@@ -756,7 +756,7 @@ with tabX:
 
             worst_dest_df = query("""
                 SELECT to_school, COUNT(*) as n,
-                    ROUND(AVG(bpm_after)::numeric,2) as avg_bpm,
+                    ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
                         ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit'
@@ -764,13 +764,13 @@ with tabX:
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                 GROUP BY to_school HAVING COUNT(*) >= 8  -- same floor as origin side
-                ORDER BY avg_bpm ASC LIMIT 10
+                ORDER BY median_bpm ASC LIMIT 10
             """)
             with st.expander("Worst Transfer Destinations"):
                 st.caption("Transfers go here and underperform. Repeatedly.")
                 for _, r in worst_dest_df.iterrows():
                     st.markdown(
-                        f"- **{r['to_school']}** — {float(r['avg_bpm']):+.1f} avg BPM · "
+                        f"- **{r['to_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
                         f"{r['hv_pct']}% High Value · {r['fail_pct']}% Didn't Fit · n={int(r['n'])}"
                     )
 
