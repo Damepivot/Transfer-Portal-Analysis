@@ -2,7 +2,9 @@
 
 Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
 
-> **1,038 scored transfers · 1,859 total transfers · 100% real CBB Reference data · zero estimation · 2021–2025 · JUCO/D2/D3/International included**
+> **3,025 scored transfers · 8,208 total portal entries · CBB Reference + Barttorvik data · 2020–21 through 2025–26 · 350 of 364 D1 schools covered**
+
+**Data sources:** [College Basketball Reference](https://www.sports-reference.com/cbb/) (BPM, box scores), [Barttorvik](https://barttorvik.com) (portal entries), [On3](https://on3.com) (recruiting composites). All scraping uses polite rate limits (2–3s delays, 429 backoff) and targets publicly accessible data for research purposes.
 
 ---
 

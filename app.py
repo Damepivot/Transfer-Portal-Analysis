@@ -907,6 +907,23 @@ with tabL:
         </p>
       </div>
 
+      <div style="background:#1A1A1A; border-left:3px solid #FF8C38; border-radius:4px;
+                  padding:18px 24px; margin-bottom:28px;">
+        <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
+          High BPM at a new school does not mean the transfer was the right call
+        </div>
+        <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
+          This dashboard measures how well a player performed at their new school — not whether
+          the move was the best decision available to them. A player who posted +4 BPM at a mid-major
+          might have posted +6 if they stayed put or chose a different program. "Transfer worked"
+          here means they contributed; it says nothing about opportunity cost.
+          <br><br>
+          To get closer to that question, look at <b>BPM change</b> (how much they improved or declined
+          vs. their previous season) and <b>transfer premium</b> (BPM after vs. what similar players
+          typically produce on that route). Those metrics measure relative improvement — not just output.
+        </p>
+      </div>
+
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                   text-transform:uppercase; margin-bottom:12px;">Known Limitations</div>
 
