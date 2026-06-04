@@ -1,18 +1,25 @@
 """
-NCAA Transfer Market Analytics — Streamlit Dashboard
+NCAA Transfer Portal Analytics — Streamlit Dashboard
 Run: streamlit run app.py
 
-Six tabs:
-  1. Transfer Overview  — season KPIs, tier-to-tier flow heatmap, volume chart
-  2. Individual Scores  — player-level context scores, verdicts, BPM/USG delta table
-  3. Team Portfolio     — per-team transfer class composition and outcomes
-  4. Recruit Profiles   — league-level stat floors by dest/origin tier and position
-  5. Player Fit Finder  — input a player profile → comparable historical transfers
-  6. Coach Search       — input program criteria → ranked Strong Match / Match players
+Nine tabs:
+  About            — methodology, role scale, metric glossary
+  Major Takeaways  — broadcast-style summary: route report, NIL era split, top transfers
+  Scope & Limits   — BPM caveats, data coverage gaps, what the model does and doesn't measure
+  Transfer Overview — season KPIs, tier-to-tier flow heatmap, volume by season
+  Individual Scores — player-level BPM verdicts, context scores, stat table
+  League Trends     — OBPM/DBPM by tier, season-over-season success rates
+  Recruit Profiles  — stat floors by destination tier, origin, and position
+  Player Fit Finder — input a player profile → comparable portal transfers with projections
+  Coach Search      — input program criteria → Transfer Pool + Expected Contribution tool
 
-All data is pulled live from PostgreSQL (localhost by default).
-Sidebar filters (season, position, dest tier) apply to tabs 1-4.
-Tabs 5-6 have their own independent inputs.
+Data: PostgreSQL (local). DB connection via environment variables in db.py.
+Sidebar filters (season, position, destination tier) apply to Transfer Overview,
+Individual Scores, and League Trends. All other tabs have independent inputs.
+
+BPM (Box Plus/Minus) from College Basketball Reference is the core metric.
+It measures points added per 100 possessions above a replacement-level player,
+adjusted for pace and strength of schedule.
 """
 
 import streamlit as st
@@ -159,8 +166,11 @@ st.html("""
 </style>
 """)
 
+# D1 basketball splits into four competitive tiers. sub_d1 (JUCO/D2/D3) and
+# international are tracked as origin only — BPM data doesn't exist for
+# non-D1 destinations, so those routes can't be scored.
 TIER_ORDER = ["high_major", "high_mid_major", "mid_major", "low_major"]
-ALL_TIERS  = TIER_ORDER + ["sub_d1", "international"]   # origin-side only
+ALL_TIERS  = TIER_ORDER + ["sub_d1", "international"]  # origin-side only
 TIER_LABELS = {
     "high_major":     "High Major",
     "high_mid_major": "High Mid Major",
@@ -169,6 +179,7 @@ TIER_LABELS = {
     "sub_d1":         "Sub-D1 (JUCO/D2/D3)",
     "international":  "International",
 }
+# Lower number = harder conference. Used to classify portal moves as up, lateral, or down.
 TIER_RANK = {"high_major": 1, "high_mid_major": 2, "mid_major": 3, "low_major": 4}
 TIER_COLORS = {
     "High Major":           "#FF6B00",
@@ -179,6 +190,8 @@ TIER_COLORS = {
     "International":        "#888888",
 }
 
+# Chart colors for verdict labels (bright, for plotly rendering).
+# Table cell backgrounds are intentionally different — see _color_verdict_cell().
 VERDICT_COLORS = {
     "Exceeded Expectations": "#FF6B00",
     "High Value":            "#FF8C38",
@@ -186,6 +199,24 @@ VERDICT_COLORS = {
     "Neutral":               "#888888",
     "Didn't Fit":            "#2D2D2D",
 }
+
+# ── BPM floors and caps (applied consistently in SQL and Python) ──────────────
+BPM_CAP       = 15   # clip at ±15 to prevent outlier seasons from skewing peer group baselines
+MIN_GAMES     = 12   # below 12 games, BPM variance is too high to be meaningful
+MIN_PEER_SIZE = 5    # transfer premium requires at least 5 peers on the same route
+
+# ── Player Fit Finder search tolerances ──────────────────────────────────────
+# These windows are wide enough to return enough comps but tight enough to stay positionally relevant.
+HEIGHT_TOL = 2     # ±2 inches — roughly one position tier of natural height variance
+WEIGHT_TOL = 15    # ±15 lbs — captures in-season body composition range
+BPM_TOL    = 2.0   # ±2.0 BPM — same production tier; fallback search expands to ±3.0
+BIRTH_TOL  = 2     # ±2 years — keeps comparisons within the same recruiting generation
+
+# ── Route success thresholds for "Works / Mixed / Risky" labels ──────────────
+# Calibrated against the full dataset: >55% High Value = consistently productive,
+# 38–55% = route-dependent, <38% = historically poor outcomes.
+ROUTE_WORKS_PCT  = 55
+ROUTE_VIABLE_PCT = 38
 
 # Position expansion: G/F and F/C are hybrid positions — include them when either base is selected
 POS_EXPAND = {
@@ -553,7 +584,7 @@ with tabX:
             FROM individual_transfer_scores
             WHERE to_tier NOT IN ('sub_d1','international')
               AND from_tier NOT IN ('sub_d1','international')
-            GROUP BY from_tier, to_tier HAVING COUNT(*) >= 15
+            GROUP BY from_tier, to_tier HAVING COUNT(*) >= 15  -- 15 players minimum for a stable HV%
             ORDER BY hv_pct DESC
         """)
         route_df["route"]      = route_df.apply(
@@ -561,7 +592,7 @@ with tabX:
             axis=1,
         )
         route_df["verdict"]    = route_df["hv_pct"].apply(
-            lambda p: "✅ Works" if p >= 55 else ("⚠️ Mixed" if p >= 25 else "❌ Avoid")
+            lambda p: "✅ Works" if p >= ROUTE_WORKS_PCT else ("⚠️ Mixed" if p >= ROUTE_VIABLE_PCT else "❌ Avoid")
         )
         route_df["direction"]  = route_df.apply(
             lambda r: "⬆️ Moving Up" if TIER_RANK.get(r["to_tier"],4) < TIER_RANK.get(r["from_tier"],4)
@@ -620,7 +651,7 @@ with tabX:
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                   AND from_tier NOT IN ('sub_d1','international')
-                GROUP BY from_school, from_tier HAVING COUNT(*) >= 8
+                GROUP BY from_school, from_tier HAVING COUNT(*) >= 8  -- 8 transfers minimum per school
                 ORDER BY avg_bpm DESC LIMIT 15
             """)
             origin_df["tier_label"] = origin_df["from_tier"].map(TIER_LABELS)
@@ -649,7 +680,7 @@ with tabX:
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                   AND from_tier NOT IN ('sub_d1','international')
-                GROUP BY from_school HAVING COUNT(*) >= 8
+                GROUP BY from_school HAVING COUNT(*) >= 8  -- 8 minimum so one bad season doesn't tank a school
                 ORDER BY avg_bpm ASC LIMIT 10
             """)
             with st.expander("Worst Starter Schools"):
@@ -670,7 +701,7 @@ with tabX:
                         ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
-                GROUP BY to_school, to_tier HAVING COUNT(*) >= 8
+                GROUP BY to_school, to_tier HAVING COUNT(*) >= 8  -- 8 minimum per destination school
                 ORDER BY avg_bpm DESC LIMIT 15
             """)
             fig_dest = px.bar(
@@ -697,7 +728,7 @@ with tabX:
                         THEN 1 END)/COUNT(*),1) as fail_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
-                GROUP BY to_school HAVING COUNT(*) >= 8
+                GROUP BY to_school HAVING COUNT(*) >= 8  -- same floor as origin side
                 ORDER BY avg_bpm ASC LIMIT 10
             """)
             with st.expander("Worst Transfer Destinations"):
@@ -1734,11 +1765,7 @@ with tab5:
     if st.button("Find My Fit", type="primary"):
         _fit_pos_list = expand_positions(fit_positions if fit_positions else ["G", "F", "C"])
         _pos_ph = ",".join(["%s"] * len(_fit_pos_list))
-        HEIGHT_TOL = 2
-        WEIGHT_TOL = 15
-        BPM_TOL    = 2.0
-        BIRTH_TOL  = 2
-
+        # HEIGHT_TOL, WEIGHT_TOL, BPM_TOL, BIRTH_TOL defined at module level above
         # Main comparables query — includes conference info for league breakdown
         comp_sql = """
             SELECT
@@ -2085,6 +2112,8 @@ with tab5:
                 comp = comp.sort_values(["_rank", "bpm_before"], ascending=[True, False])
 
                 def _color_verdict_cell(val):
+                    # Muted dark tones for table cell backgrounds (dark theme).
+                    # Different from VERDICT_COLORS which uses bright hues for chart rendering.
                     colors = {
                         "Exceeded Expectations": "#2d1a4a",
                         "High Value":            "#1a4731",
@@ -2205,6 +2234,10 @@ with tab6:
         "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
     )
 
+    # BPM bands for each roster role — thresholds match the role scale used throughout the app.
+    # Star (6+) = all-conference caliber. Starter (3-6) = reliable starter anywhere.
+    # Key Guy (1-3) = core rotation. Solid Backup (-0.5 to 1) = quality depth.
+    # Project (<-0.5) = below average but potentially developable.
     ROLE_OPTIONS = {
         "Any Role":        (-20, 20),
         "🏆 Star":         (6.0, 20),
