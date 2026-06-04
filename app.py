@@ -1,6 +1,18 @@
 """
-NCAA Transfer Market — Streamlit Dashboard
+NCAA Transfer Market Analytics — Streamlit Dashboard
 Run: streamlit run app.py
+
+Six tabs:
+  1. Transfer Overview  — season KPIs, tier-to-tier flow heatmap, volume chart
+  2. Individual Scores  — player-level context scores, verdicts, BPM/USG delta table
+  3. Team Portfolio     — per-team transfer class composition and outcomes
+  4. Recruit Profiles   — league-level stat floors by dest/origin tier and position
+  5. Player Fit Finder  — input a player profile → comparable historical transfers
+  6. Coach Search       — input program criteria → ranked Strong Match / Match players
+
+All data is pulled live from PostgreSQL (localhost by default).
+Sidebar filters (season, position, dest tier) apply to tabs 1-4.
+Tabs 5-6 have their own independent inputs.
 """
 
 import streamlit as st
@@ -15,35 +27,201 @@ from db import DB_CONFIG
 
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="NCAA Transfer Market",
+    page_title="PivotHoops | Transfer Intelligence",
     page_icon="🏀",
     layout="wide",
 )
 
+# ── PivotHoops Brand CSS ──────────────────────────────────────────────────────
+st.markdown("""
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Global reset ── */
+  .main { background-color: #0D0D0D; }
+
+  /* ── Branded header ── */
+  .pivothoops-header {
+    background: linear-gradient(135deg, #1A1A1A 0%, #0D0D0D 60%, #1a0a00 100%);
+    border-bottom: 2px solid #FF6B00;
+    padding: 18px 24px 14px 24px;
+    margin-bottom: 24px;
+    border-radius: 4px;
+  }
+  .pivothoops-header .brand-name {
+    font-family: 'Bebas Neue', 'Rajdhani', sans-serif;
+    font-size: 2.4rem;
+    letter-spacing: 0.08em;
+    color: #FF6B00;
+    line-height: 1;
+    margin: 0;
+  }
+  .pivothoops-header .brand-subtitle {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.85rem;
+    letter-spacing: 0.18em;
+    color: #888888;
+    text-transform: uppercase;
+    margin-top: 3px;
+  }
+
+  /* ── Metric cards — orange left border ── */
+  [data-testid="metric-container"] {
+    background: #1A1A1A;
+    border-left: 3px solid #FF6B00;
+    border-radius: 4px;
+    padding: 12px 16px !important;
+  }
+  [data-testid="metric-container"] label {
+    color: #888888 !important;
+    font-size: 0.78rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  [data-testid="metric-container"] [data-testid="metric-value"] {
+    color: #FFFFFF !important;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+  }
+
+  /* ── Tabs — bolder, larger, orange active glow ── */
+  .stTabs [data-baseweb="tab-list"] {
+    background: #1A1A1A;
+    border-radius: 4px;
+    padding: 4px;
+    gap: 4px;
+  }
+  .stTabs [data-baseweb="tab"] {
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: #888888;
+    padding: 8px 18px;
+    border-radius: 3px;
+    border: none;
+    background: transparent;
+  }
+  .stTabs [aria-selected="true"] {
+    color: #FF6B00 !important;
+    background: #0D0D0D !important;
+    box-shadow: 0 0 10px rgba(255, 107, 0, 0.35), 0 2px 0 #FF6B00 !important;
+  }
+  .stTabs [data-baseweb="tab"]:hover {
+    color: #FF8C38 !important;
+  }
+
+  /* ── Dataframe headers orange ── */
+  [data-testid="stDataFrame"] th,
+  .dvn-scroller .col_heading {
+    color: #FF6B00 !important;
+    font-weight: 700 !important;
+    font-family: 'Rajdhani', sans-serif !important;
+    letter-spacing: 0.04em;
+    border-bottom: 1px solid #FF6B00 !important;
+  }
+
+  /* ── Sidebar orange gradient ── */
+  [data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1a0a00 0%, #1A1A1A 40%, #0D0D0D 100%) !important;
+    border-right: 1px solid #FF6B00;
+  }
+  [data-testid="stSidebar"] .sidebar-content {
+    background: transparent !important;
+  }
+
+  /* ── Buttons orange ── */
+  .stButton > button {
+    background: #FF6B00 !important;
+    color: #FFFFFF !important;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border: none !important;
+    border-radius: 3px !important;
+    padding: 8px 24px !important;
+    transition: background 0.2s ease;
+  }
+  .stButton > button:hover {
+    background: #FF8C38 !important;
+    color: #FFFFFF !important;
+  }
+  .stButton > button:active {
+    background: #e05e00 !important;
+  }
+
+  /* ── Remove Streamlit footer branding ── */
+  #MainMenu { visibility: hidden; }
+  footer { visibility: hidden; }
+  footer:after { visibility: hidden; }
+  [data-testid="stToolbar"] { display: none; }
+  .viewerBadge_container__1QSob { display: none !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── Branded page header ───────────────────────────────────────────────────────
+st.markdown("""
+<div class="pivothoops-header">
+  <div class="brand-name">🏀 PIVOT HOOPS</div>
+  <div class="brand-subtitle">Transfer Analytics &nbsp;·&nbsp; NCAA Men's Basketball &nbsp;·&nbsp; 2021–2025</div>
+</div>
+""", unsafe_allow_html=True)
+
 TIER_ORDER = ["high_major", "high_mid_major", "mid_major", "low_major"]
+ALL_TIERS  = TIER_ORDER + ["sub_d1", "international"]   # origin-side only
 TIER_LABELS = {
     "high_major":     "High Major",
     "high_mid_major": "High Mid Major",
     "mid_major":      "Mid Major",
     "low_major":      "Low Major",
     "sub_d1":         "Sub-D1 (JUCO/D2/D3)",
+    "international":  "International",
 }
 TIER_COLORS = {
-    "High Major":           "#1f4e79",
-    "High Mid Major":       "#2e75b6",
-    "Mid Major":            "#9dc3e6",
-    "Low Major":            "#bdd7ee",
-    "Sub-D1 (JUCO/D2/D3)": "#d9b8f5",
+    "High Major":           "#FF6B00",
+    "High Mid Major":       "#FF8C38",
+    "Mid Major":            "#FFB347",
+    "Low Major":            "#FFCC80",
+    "Sub-D1 (JUCO/D2/D3)": "#555555",
+    "International":        "#888888",
 }
 
 VERDICT_COLORS = {
-    "Exceeded Expectations": "#9b59b6",
-    "High Value":            "#2ecc71",
-    "Solid Addition":        "#27ae60",
-    "Neutral":               "#f39c12",
-    "Didn't Fit":            "#e74c3c",
+    "Exceeded Expectations": "#FF6B00",
+    "High Value":            "#FF8C38",
+    "Solid Addition":        "#FFB347",
+    "Neutral":               "#888888",
+    "Didn't Fit":            "#2D2D2D",
 }
 VERDICT_ORDER = ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"]
+
+# Position-relative physical profile buckets for Coach Search match scoring.
+# "Short/Average/Tall" and "Lean/Average/Heavy" are relative to what's normal at each position,
+# not absolute measurements — a 6'4" C is Short; a 6'4" G is Tall.
+HEIGHT_BUCKETS = {
+    "G":   {"Short": (0, 73),  "Average": (74, 76), "Tall": (77, 999)},
+    "G/F": {"Short": (0, 75),  "Average": (76, 78), "Tall": (79, 999)},
+    "F":   {"Short": (0, 77),  "Average": (78, 80), "Tall": (81, 999)},
+    "F/C": {"Short": (0, 79),  "Average": (80, 82), "Tall": (83, 999)},
+    "C":   {"Short": (0, 81),  "Average": (82, 84), "Tall": (85, 999)},
+}
+WEIGHT_BUCKETS = {
+    "G":   {"Lean": (0, 189), "Average": (190, 210), "Heavy": (211, 999)},
+    "G/F": {"Lean": (0, 199), "Average": (200, 220), "Heavy": (221, 999)},
+    "F":   {"Lean": (0, 209), "Average": (210, 230), "Heavy": (231, 999)},
+    "F/C": {"Lean": (0, 219), "Average": (220, 240), "Heavy": (241, 999)},
+    "C":   {"Lean": (0, 234), "Average": (235, 260), "Heavy": (261, 999)},
+}
+
+
+def _phys_cat(val, position, buckets):
+    """Return the physical category (Short/Average/Tall or Lean/Average/Heavy) for a player."""
+    if pd.isna(val) or not position or position not in buckets:
+        return None
+    for cat, (lo, hi) in buckets[position].items():
+        if lo <= int(val) <= hi:
+            return cat
+    return list(buckets[position])[-1]   # above max = top bucket
 
 # ── DB connection ─────────────────────────────────────────────────────────────
 def get_conn():
@@ -63,8 +241,29 @@ def query(sql: str, params=None) -> pd.DataFrame:
 
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/2/28/March_Madness_logo.svg/320px-March_Madness_logo.svg.png", width=120)
-st.sidebar.title("Filters")
+st.sidebar.markdown("""
+<div style="
+  padding: 12px 8px 16px 8px;
+  border-bottom: 1px solid #FF6B00;
+  margin-bottom: 12px;
+">
+  <div style="
+    font-family: 'Bebas Neue', 'Rajdhani', sans-serif;
+    font-size: 1.6rem;
+    letter-spacing: 0.1em;
+    color: #FF6B00;
+    line-height: 1;
+  ">🏀 PIVOT HOOPS</div>
+  <div style="
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    color: #555555;
+    text-transform: uppercase;
+    margin-top: 4px;
+  ">Transfer Intelligence</div>
+</div>
+""", unsafe_allow_html=True)
+st.sidebar.markdown("**Filters**")
 
 seasons = query("SELECT DISTINCT season FROM transfers ORDER BY season")["season"].tolist()
 nil_era_seasons = [s for s in seasons if s >= "2022-23"]
@@ -80,10 +279,11 @@ dest_tiers = ["All"] + TIER_ORDER
 selected_dest = st.sidebar.selectbox("Destination Tier", dest_tiers, format_func=lambda x: TIER_LABELS.get(x, x))
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Data: BartTorvik · Kaggle Transfer Portal · 2021–25")
+st.sidebar.caption("Data: CBB Reference · Kaggle · On3 · 2021–25")
 
 
 def season_filter(col="tr.season"):
+    """Return a (sql_clause, params) pair for the season sidebar filter."""
     if not selected_seasons:
         return "1=1", []
     placeholders = ",".join(["%s"] * len(selected_seasons))
@@ -91,18 +291,21 @@ def season_filter(col="tr.season"):
 
 
 def pos_filter(col="p.position"):
+    """Return a (sql_clause, params) pair for the position sidebar filter."""
     if selected_pos == "All":
         return "1=1", []
     return f"{col} = %s", [selected_pos]
 
 
 def dest_filter(col="c_to.tier"):
+    """Return a (sql_clause, params) pair for the destination tier sidebar filter."""
     if selected_dest == "All":
         return "1=1", []
     return f"{col} = %s", [selected_dest]
 
 
 def build_where(*filters):
+    """Combine multiple (clause, params) filter pairs into a single WHERE clause."""
     clauses, params = [], []
     for clause, p in filters:
         clauses.append(clause)
@@ -125,7 +328,7 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
 # TAB 1 — Transfer Overview
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.title("NCAA Transfer Market Overview")
+    st.title("🏀 Transfer Intelligence")
     st.caption("Men's basketball · 2021–2025 · Post-NIL era")
 
     sf, sp = season_filter()
@@ -178,6 +381,7 @@ with tab1:
             JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
             {build_where((season_filter("tr.season")[0], season_filter("tr.season")[1]),
                          (pos_filter()[0], pos_filter()[1]))[0]}
+              AND c_to.tier NOT IN ('sub_d1', 'international')
             GROUP BY 1, 2
         """
         try:
@@ -224,8 +428,7 @@ with tab1:
 # TAB 2 — Individual Transfer Scores
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.title("Individual Transfer Performance")
-    st.markdown("**Transfer Premium** = actual BPM minus the avg BPM of peers who made the same tier-to-tier jump. Positive = beat the projection.")
+    st.title("📊 Player Scores & Verdicts")
 
     its_sql = """
         SELECT
@@ -237,10 +440,9 @@ with tab2:
             context_score, efficiency_after,
             mpg_after, ppg_after, transfer_verdict, peer_group_size
         FROM individual_transfer_scores
-        WHERE 1=1
+        WHERE to_tier NOT IN ('sub_d1', 'international')
     """
-    filters_its = []
-    params_its  = []
+    params_its = []
 
     if selected_seasons:
         its_sql += f" AND season IN ({','.join(['%s']*len(selected_seasons))})"
@@ -252,7 +454,7 @@ with tab2:
         its_sql += " AND to_tier = %s"
         params_its.append(selected_dest)
 
-    its_sql += " ORDER BY transfer_premium DESC"
+    its_sql += " ORDER BY transfer_premium DESC NULLS LAST"
 
     try:
         its = query(its_sql, params_its or None)
@@ -262,56 +464,94 @@ with tab2:
         # Summary strip
         c1, c2, c3, c4, c5 = st.columns(5)
         vc = its["transfer_verdict"].value_counts()
-        c1.metric("Exceeded",       vc.get("Exceeded Expectations", 0))
-        c2.metric("High Value",     vc.get("High Value", 0))
-        c3.metric("Solid Addition", vc.get("Solid Addition", 0))
-        c4.metric("Neutral",        vc.get("Neutral", 0))
-        c5.metric("Didn't Fit",     vc.get("Didn't Fit", 0))
+        c1.metric("High Value",     vc.get("High Value", 0))
+        c2.metric("Solid Addition", vc.get("Solid Addition", 0))
+        c3.metric("Neutral",        vc.get("Neutral", 0))
+        c4.metric("Didn't Fit",     vc.get("Didn't Fit", 0))
+        scored = its["transfer_premium"].notna().sum()
+        c5.metric("With Peer Baseline", f"{scored:,}")
 
+        st.markdown("---")
         col_l, col_r = st.columns([3, 2])
 
         with col_l:
-            st.subheader("Transfer Premium — Top & Bottom 20")
-            display = pd.concat([its.head(10), its.tail(10)]).drop_duplicates()
-            fig = px.bar(
-                display.sort_values("transfer_premium"),
-                x="transfer_premium",
-                y="full_name",
-                color="transfer_verdict",
-                color_discrete_map=VERDICT_COLORS,
-                orientation="h",
-                hover_data=["from_school", "to_school", "season", "bpm_before", "bpm_after"],
-                labels={"transfer_premium": "Transfer Premium (BPM)", "full_name": ""},
+            st.subheader("Transfer Premium — Top & Bottom 15")
+            st.caption(
+                "**Transfer Premium** = player BPM minus the avg BPM of peers who made "
+                "the same tier jump with a similar recruiting composite. Positive = beat projection."
             )
-            fig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.4)
-            fig.update_layout(margin=dict(t=20, b=20), legend_title="")
-            st.plotly_chart(fig, use_container_width=True)
+            prem_df = its[its["transfer_premium"].notna()].copy()
+            if len(prem_df) >= 2:
+                top_n    = min(15, len(prem_df) // 2)
+                display  = pd.concat([prem_df.head(top_n), prem_df.tail(top_n)]).drop_duplicates()
+                display  = display.sort_values("transfer_premium")
+                fig = px.bar(
+                    display,
+                    x="transfer_premium",
+                    y="full_name",
+                    color="transfer_verdict",
+                    color_discrete_map=VERDICT_COLORS,
+                    orientation="h",
+                    hover_data=["from_school", "to_school", "season", "bpm_before", "bpm_after"],
+                    labels={"transfer_premium": "Transfer Premium (BPM vs Peer Avg)", "full_name": ""},
+                )
+                fig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.5)
+                fig.update_layout(margin=dict(t=10, b=10), legend_title="Verdict",
+                                  height=max(400, len(display) * 22))
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("Not enough players with peer baselines to display. Run ETL first.")
 
         with col_r:
-            st.subheader("Verdict Breakdown by Tier Jump")
+            st.subheader("Verdict Breakdown by Destination Tier")
+            tier_order_labels = [TIER_LABELS[t] for t in TIER_ORDER]
             tier_verdict = (
                 its.groupby(["to_tier_label", "transfer_verdict"])
                 .size().reset_index(name="count")
             )
+            tier_verdict["to_tier_label"] = pd.Categorical(
+                tier_verdict["to_tier_label"], categories=tier_order_labels, ordered=True
+            )
             fig2 = px.bar(
-                tier_verdict,
+                tier_verdict.sort_values("to_tier_label"),
                 x="to_tier_label",
                 y="count",
                 color="transfer_verdict",
                 color_discrete_map=VERDICT_COLORS,
+                category_orders={"transfer_verdict": VERDICT_ORDER},
                 barmode="stack",
-                labels={"to_tier_label": "Destination Tier", "count": "Players"},
+                labels={"to_tier_label": "Destination Tier", "count": "Players",
+                        "transfer_verdict": "Verdict"},
             )
-            fig2.update_layout(margin=dict(t=20, b=20), legend_title="")
+            fig2.update_layout(margin=dict(t=10, b=10), legend_title="")
             st.plotly_chart(fig2, use_container_width=True)
 
+        st.markdown("---")
         st.subheader("Full Transfer Table")
-        show_cols = ["full_name", "position", "season", "from_school", "from_tier_label",
-                     "to_school", "to_tier_label", "bpm_before", "bpm_after", "bpm_change",
-                     "usage_before", "usage_after", "usg_change",
+
+        with st.expander("What do these columns mean?", expanded=False):
+            st.markdown("""
+| Column | Plain English |
+|--------|---------------|
+| **BPM Before** | How much above/below average this player was at their *old* school. What a scout would see in the portal. |
+| **BPM After** | What they actually delivered after transferring. The result. |
+| **BPM Δ** | How much they improved or declined. |
+| **Context Score** | BPM × Tier Difficulty × Role Difficulty. Rewards impact in harder environments. Our internal rating. |
+| **Premium** | How much they beat the expected BPM for their type of transfer. Positive = exceeded expectations. |
+| **Verdict** | 🌟 Exceeded · ✅ High Value · 👍 Solid Addition · ➖ Neutral · ❌ Didn't Fit |
+            """)
+
+        its["role"] = its["bpm_after"].apply(
+            lambda b: ("🌟 Starter" if b >= 3.0 else "💪 Key Guy" if b >= 1.0
+                       else "✅ Solid Backup" if b >= -0.5 else "📋 Project")
+            if pd.notna(b) else "—"
+        )
+        show_cols = ["role", "full_name", "position", "season", "from_school", "from_tier_label",
+                     "to_school", "to_tier_label", "bpm_before", "bpm_after",
                      "context_score", "transfer_premium", "transfer_verdict"]
         st.dataframe(
             its[show_cols].rename(columns={
+                "role":             "D1 Role",
                 "full_name":        "Player",
                 "position":         "Pos",
                 "season":           "Season",
@@ -321,10 +561,6 @@ with tab2:
                 "to_tier_label":    "To Tier",
                 "bpm_before":       "BPM Before",
                 "bpm_after":        "BPM After",
-                "bpm_change":       "BPM Δ",
-                "usage_before":     "USG Before",
-                "usage_after":      "USG After",
-                "usg_change":       "USG Δ",
                 "context_score":    "Context Score",
                 "transfer_premium": "Premium",
                 "transfer_verdict": "Verdict",
@@ -340,7 +576,7 @@ with tab2:
 # TAB 3 — League Trends
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.title("League Transfer Trends")
+    st.title("📈 League Transfer Trends")
     st.markdown("How transfers perform at each tier level — success rates, context scores, OBPM vs DBPM, and size patterns.")
 
     try:
@@ -356,15 +592,19 @@ with tab3:
         # ── Section 1: Success rate heatmap by tier pair ───────────────────────
         st.subheader("Transfer Success Rate by Tier Move")
         st.caption("% of transfers rated High Value or Solid Addition")
+        dest_labels   = [TIER_LABELS[t] for t in TIER_ORDER]
+        origin_labels = [TIER_LABELS[t] for t in ALL_TIERS]
+        ltt_dest = ltt[ltt["dest_label"].isin(dest_labels)].copy()
         heat = (
-            ltt.groupby(["origin_label", "dest_label"])
+            ltt_dest.groupby(["origin_label", "dest_label"])
             .agg(total=("transfer_count","sum"), hv=("high_value","sum"), sa=("solid_addition","sum"))
             .reset_index()
         )
         heat["success_pct"] = ((heat["hv"] + heat["sa"]) / heat["total"] * 100).round(1)
         pivot_heat = heat.pivot(index="origin_label", columns="dest_label", values="success_pct").fillna(0)
-        tier_order_labels = [TIER_LABELS[t] for t in TIER_ORDER if TIER_LABELS[t] in pivot_heat.index]
-        pivot_heat = pivot_heat.reindex(index=tier_order_labels, columns=tier_order_labels, fill_value=0)
+        row_order = [TIER_LABELS[t] for t in ALL_TIERS if TIER_LABELS[t] in pivot_heat.index]
+        col_order = [TIER_LABELS[t] for t in TIER_ORDER if TIER_LABELS[t] in pivot_heat.columns]
+        pivot_heat = pivot_heat.reindex(index=row_order, columns=col_order, fill_value=0)
         fig = px.imshow(
             pivot_heat, text_auto=".1f",
             color_continuous_scale="RdYlGn", range_color=[20, 70],
@@ -380,7 +620,7 @@ with tab3:
         with col_l:
             st.subheader("Avg Context Score by Position & Destination")
             pos_ctx = (
-                ltt.groupby(["dest_label", "position"])
+                ltt_dest.groupby(["dest_label", "position"])
                 .agg(avg_ctx=("avg_context_score","mean"), n=("transfer_count","sum"))
                 .reset_index()
             )
@@ -396,7 +636,7 @@ with tab3:
         with col_r:
             st.subheader("Expected Context Score by Tier Move")
             move_ctx = (
-                ltt.groupby(["origin_label", "dest_label"])
+                ltt_dest.groupby(["origin_label", "dest_label"])
                 .agg(avg_ctx=("avg_context_score","mean"), n=("transfer_count","sum"))
                 .reset_index()
             )
@@ -428,6 +668,7 @@ with tab3:
             JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
             JOIN conferences c_to ON t_to.conference_id = c_to.conference_id
             WHERE its.obpm_after IS NOT NULL
+              AND c_to.tier NOT IN ('sub_d1', 'international')
             GROUP BY 1, 2
             HAVING COUNT(*) >= 5
             ORDER BY 1, 2
@@ -522,7 +763,7 @@ with tab3:
 # TAB 4 — Recruit Profiles
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.title("Recruitment Profile Recommendations")
+    st.title("🎯 Recruit Profile Intel")
     st.markdown(
         "Two-part view: **who these players are** (raw pre-transfer profile, no weighting) "
         "and **what to expect at the new level** (post-transfer production + contextual value)."
@@ -681,21 +922,44 @@ with tab4:
 # TAB 5 — Player Fit Finder
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.title("Player Fit Finder")
+    st.title("🔍 Player Fit Finder")
     st.markdown(
-        "Enter your profile below. The model finds players with similar size, age, "
-        "position, and production — then shows which destination tiers they thrived in."
+        "Enter your profile below. We'll predict which tiers and **specific conferences** "
+        "you'd likely thrive in — based on players with similar stats, size, and origin."
+    )
+    st.info(
+        "**BPM (Box Plus/Minus)** measures how many points above average you contribute per 100 possessions.  "
+        "**+3.0+** = Starter-level · **+1.0 to 3.0** = Key rotation guy · **0 to +1.0** = Solid backup · **Below 0** = Role / project player"
     )
 
     st.markdown("### Your Profile")
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        fit_position = st.selectbox("Position", ["G", "G/F", "F", "F/C", "C"], key="fit_pos")
-        fit_tier     = st.selectbox(
-            "Current Program Tier", TIER_ORDER,
+        fit_position  = st.selectbox("Position", ["G", "G/F", "F", "F/C", "C"], key="fit_pos")
+        fit_tier      = st.selectbox(
+            "Current Program Tier", ALL_TIERS,
             format_func=lambda x: TIER_LABELS[x], key="fit_tier"
         )
+        fit_composite_on = st.checkbox(
+            "I know my On3 Transfer Composite", value=False, key="fit_composite_on",
+            help="Turn on if you know your On3/247 portal rating — refines the model projection by recruit tier."
+        )
+        if fit_composite_on:
+            fit_composite = st.slider(
+                "On3 Transfer Composite", 40, 100, 75, key="fit_composite",
+                help="70–79 = mid tier, 80–89 = high, 90+ = elite"
+            )
+            if fit_composite >= 90:
+                fit_recruit_tier = "elite"
+            elif fit_composite >= 80:
+                fit_recruit_tier = "high"
+            elif fit_composite >= 70:
+                fit_recruit_tier = "mid"
+            else:
+                fit_recruit_tier = "low"
+        else:
+            fit_recruit_tier = None  # use pooled fallback projection
 
     with col2:
         fit_height = st.slider("Height (inches)", 68, 88, 76, key="fit_height",
@@ -710,11 +974,22 @@ with tab5:
     st.markdown("---")
 
     if st.button("Find My Fit", type="primary"):
-        HEIGHT_TOL = 1
-        WEIGHT_TOL = 10
+        # Classify recruit tier from composite
+        if fit_composite >= 90:
+            fit_recruit_tier = "elite"
+        elif fit_composite >= 80:
+            fit_recruit_tier = "high"
+        elif fit_composite >= 70:
+            fit_recruit_tier = "mid"
+        else:
+            fit_recruit_tier = "low"
+
+        HEIGHT_TOL = 2
+        WEIGHT_TOL = 15
         BPM_TOL    = 2.0
         BIRTH_TOL  = 2
 
+        # Main comparables query — includes conference info for league breakdown
         comp_sql = """
             SELECT
                 its.transfer_id,
@@ -724,30 +999,39 @@ with tab5:
                 its.from_tier,
                 its.to_school,
                 its.to_tier,
+                c_dest.name           AS to_conference,
+                c_dest.abbreviation   AS to_conf_abbr,
                 its.season,
                 its.bpm_before,
+                its.bpm_before_adj,
                 its.bpm_after,
                 its.transfer_premium,
+                its.usage_before,
                 its.usage_after,
                 its.efficiency_after,
                 its.ppg_after,
+                its.context_score,
                 its.transfer_verdict,
                 p.height_in,
                 p.weight_lbs,
                 p.birth_year,
                 p.recruiting_composite
             FROM individual_transfer_scores its
-            JOIN players p ON its.player_id = p.player_id
+            JOIN players p      ON its.player_id   = p.player_id
+            JOIN transfers tr   ON its.transfer_id = tr.transfer_id
+            JOIN teams t_to     ON tr.to_team_id   = t_to.team_id
+            JOIN conferences c_dest ON t_to.conference_id = c_dest.conference_id
             WHERE its.position = %s
               AND its.from_tier = %s
               AND its.bpm_before BETWEEN %s AND %s
-              AND (p.height_in IS NULL OR p.height_in BETWEEN %s AND %s)
+              AND (p.height_in  IS NULL OR p.height_in  BETWEEN %s AND %s)
               AND (p.weight_lbs IS NULL OR p.weight_lbs BETWEEN %s AND %s)
               AND (p.birth_year IS NULL OR p.birth_year BETWEEN %s AND %s)
+              AND its.to_tier NOT IN ('sub_d1', 'international')
             ORDER BY
                 ABS(its.bpm_before - %s) +
                 ABS(COALESCE(p.height_in, %s) - %s) * 0.1
-            LIMIT 50
+            LIMIT 120
         """
         comp_params = [
             fit_position, fit_tier,
@@ -760,109 +1044,278 @@ with tab5:
 
         try:
             comp = query(comp_sql, comp_params)
+            relaxed = False
 
             if comp.empty:
+                # Fallback: drop physical/age filters, keep position + BPM
                 comp_sql_relaxed = """
                     SELECT
                         its.transfer_id, its.full_name, its.position,
                         its.from_school, its.from_tier, its.to_school, its.to_tier,
-                        its.season, its.bpm_before, its.bpm_after, its.transfer_premium,
-                        its.usage_after, its.efficiency_after, its.ppg_after,
+                        c_dest.name         AS to_conference,
+                        c_dest.abbreviation AS to_conf_abbr,
+                        its.season,
+                        its.bpm_before, its.bpm_before_adj, its.bpm_after,
+                        its.transfer_premium, its.usage_before, its.usage_after,
+                        its.efficiency_after, its.ppg_after, its.context_score,
                         its.transfer_verdict,
                         p.height_in, p.weight_lbs, p.birth_year, p.recruiting_composite
                     FROM individual_transfer_scores its
-                    JOIN players p ON its.player_id = p.player_id
+                    JOIN players p    ON its.player_id   = p.player_id
+                    JOIN transfers tr ON its.transfer_id = tr.transfer_id
+                    JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
+                    JOIN conferences c_dest ON t_to.conference_id = c_dest.conference_id
                     WHERE its.position = %s
                       AND its.from_tier = %s
                       AND its.bpm_before BETWEEN %s AND %s
+                      AND its.to_tier NOT IN ('sub_d1', 'international')
                     ORDER BY ABS(its.bpm_before - %s)
-                    LIMIT 50
+                    LIMIT 120
                 """
                 comp = query(comp_sql_relaxed, [
                     fit_position, fit_tier,
                     fit_bpm - BPM_TOL * 1.5, fit_bpm + BPM_TOL * 1.5,
                     fit_bpm,
                 ])
-                st.caption("No close physical matches found — showing position/BPM matches only.")
+                relaxed = True
 
             if comp.empty:
                 st.warning("Not enough comparable transfers in the dataset yet. Try adjusting your BPM or position.")
             else:
-                st.subheader(f"Best Destination Tiers ({len(comp)} comparable transfers found)")
+                if relaxed:
+                    st.caption("No close physical matches found — showing position/BPM comparables only.")
+
+                SUCCESS_VERDICTS = {"Exceeded Expectations", "High Value", "Solid Addition"}
+
+                # ── SECTION A: Transfer Projection by Tier ────────────────────────
+                st.subheader(f"Your Transfer Projection  ·  {len(comp)} comparables found")
+                st.caption(
+                    "Based on players with the same position, origin tier, and similar BPM "
+                    "(±2 pts). Success = High Value or Solid Addition at that level."
+                )
 
                 tier_summary = (
-                    comp.groupby("to_tier")
-                    .agg(
-                        avg_premium=("transfer_premium", "mean"),
-                        avg_bpm_after=("bpm_after", "mean"),
-                        count=("transfer_id", "count"),
-                        pct_outperformed=("transfer_verdict", lambda x: round((x == "Exceeded Expectations").mean() * 100, 1)),
+                    comp.groupby("to_tier").agg(
+                        avg_bpm_after   = ("bpm_after",        "mean"),
+                        avg_premium     = ("transfer_premium",  "mean"),
+                        success_rate    = ("transfer_verdict",
+                                          lambda x: x.isin(SUCCESS_VERDICTS).mean() * 100),
+                        n               = ("transfer_id", "count"),
                     )
                     .reset_index()
-                    .sort_values("avg_premium", ascending=False)
                 )
                 tier_summary["to_tier_label"] = tier_summary["to_tier"].map(TIER_LABELS)
-                tier_summary["avg_premium"]    = tier_summary["avg_premium"].round(2)
-                tier_summary["avg_bpm_after"]  = tier_summary["avg_bpm_after"].round(2)
+                tier_summary["avg_bpm_after"] = tier_summary["avg_bpm_after"].round(2)
+                tier_summary["avg_premium"]   = tier_summary["avg_premium"].round(2)
+                tier_summary["success_rate"]  = tier_summary["success_rate"].round(1)
 
-                col_chart, col_table = st.columns([3, 2])
-
-                with col_chart:
-                    fig = px.bar(
-                        tier_summary.sort_values("avg_premium"),
-                        x="avg_premium",
-                        y="to_tier_label",
-                        color="avg_premium",
-                        color_continuous_scale=["#e74c3c", "#f39c12", "#2ecc71"],
-                        orientation="h",
-                        labels={"avg_premium": "Avg Transfer Premium", "to_tier_label": ""},
-                        text="avg_premium",
+                # Model projection — recruit-specific if composite is known, else pooled fallback
+                if fit_recruit_tier:
+                    proj_df = query(
+                        """
+                        SELECT to_tier, ROUND(avg_bpm_after::numeric, 2) AS proj_bpm, sample_size
+                        FROM tier_pair_expectations
+                        WHERE from_tier = %s AND recruit_tier = %s AND sample_size >= 3
+                        """,
+                        [fit_tier, fit_recruit_tier],
                     )
-                    fig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.5)
-                    fig.update_traces(texttemplate="%{text:+.2f}", textposition="outside")
-                    fig.update_layout(margin=dict(t=10, b=10), showlegend=False, coloraxis_showscale=False)
-                    st.plotly_chart(fig, use_container_width=True)
-
-                with col_table:
-                    st.dataframe(
-                        tier_summary[["to_tier_label", "avg_premium", "avg_bpm_after", "count", "pct_outperformed"]]
-                        .rename(columns={
-                            "to_tier_label":    "Destination",
-                            "avg_premium":      "Avg Premium",
-                            "avg_bpm_after":    "Avg BPM After",
-                            "count":            "Sample (n)",
-                            "pct_outperformed": "% Outperformed",
-                        }),
-                        use_container_width=True,
-                        hide_index=True,
+                else:
+                    proj_df = query(
+                        """
+                        SELECT to_tier, ROUND(avg_bpm_after::numeric, 2) AS proj_bpm, sample_size
+                        FROM tier_pair_fallback
+                        WHERE from_tier = %s AND sample_size >= 5
+                        """,
+                        [fit_tier],
                     )
+                if not proj_df.empty:
+                    tier_summary = tier_summary.merge(
+                        proj_df[["to_tier", "proj_bpm"]],
+                        on="to_tier", how="left"
+                    )
+                else:
+                    tier_summary["proj_bpm"] = None
 
-                st.subheader("Comparable Players")
+                # Sort: Best Fit first (by success rate then avg BPM)
+                tier_summary = tier_summary.sort_values(
+                    ["success_rate", "avg_bpm_after"], ascending=False
+                )
+
+                # Projection cards
+                card_cols = st.columns(min(4, len(tier_summary)))
+                for i, (_, row) in enumerate(tier_summary.iterrows()):
+                    if i >= len(card_cols):
+                        break
+                    with card_cols[i]:
+                        sr = row["success_rate"]
+                        if sr >= 55:
+                            badge, rating = "🟢", "Best Fit"
+                        elif sr >= 38:
+                            badge, rating = "🟡", "Viable"
+                        else:
+                            badge, rating = "🔴", "Risky"
+
+                        st.markdown(f"**{row['to_tier_label']}**")
+                        st.markdown(f"{badge} **{rating}**")
+                        if pd.notna(row.get("proj_bpm")):
+                            proj_help = (
+                                "Expected BPM based on your route + recruit tier (NIL-era peer baseline)"
+                                if fit_recruit_tier
+                                else "Expected BPM for your origin → destination route (pooled, no composite filter)"
+                            )
+                            st.metric("Model Projection", f"{float(row['proj_bpm']):+.1f} BPM", help=proj_help)
+                        st.metric("Success Rate", f"{sr:.0f}%")
+                        st.metric("Avg BPM After", f"{row['avg_bpm_after']:+.1f}")
+                        st.caption(f"n = {int(row['n'])} comparables")
+
+                # Premium bar chart
+                st.markdown("")
+                fig_proj = px.bar(
+                    tier_summary.sort_values("avg_bpm_after"),
+                    x="avg_bpm_after", y="to_tier_label",
+                    color="success_rate",
+                    color_continuous_scale=["#e74c3c", "#f39c12", "#2ecc71"],
+                    range_color=[20, 70],
+                    orientation="h",
+                    text="avg_bpm_after",
+                    labels={
+                        "avg_bpm_after": "Avg BPM After Transfer",
+                        "to_tier_label": "",
+                        "success_rate":  "Success %",
+                    },
+                )
+                fig_proj.add_vline(x=0.5, line_dash="dot", line_color="#2ecc71", opacity=0.6)
+                fig_proj.add_vline(x=0,   line_dash="dash", line_color="white", opacity=0.3)
+                fig_proj.update_traces(texttemplate="%{text:+.2f}", textposition="outside")
+                fig_proj.update_layout(
+                    margin=dict(t=10, b=10), coloraxis_showscale=True,
+                    coloraxis_colorbar=dict(title="Success %", thickness=12),
+                )
+                st.plotly_chart(fig_proj, use_container_width=True)
+
+                # ── SECTION B: Best Leagues for Your Profile ──────────────────────
+                st.markdown("---")
+                st.subheader("Best Leagues for Your Profile")
+                st.caption(
+                    "Specific conferences where players like you historically performed best. "
+                    "Sorted by avg BPM after transfer. Min 2 comparable players per conference."
+                )
+
+                conf_summary = (
+                    comp.groupby(["to_tier", "to_conference", "to_conf_abbr"]).agg(
+                        avg_bpm     = ("bpm_after",       "mean"),
+                        avg_premium = ("transfer_premium", "mean"),
+                        success_pct = ("transfer_verdict",
+                                      lambda x: x.isin(SUCCESS_VERDICTS).mean() * 100),
+                        n           = ("transfer_id", "count"),
+                    )
+                    .reset_index()
+                )
+                conf_summary = conf_summary[conf_summary["n"] >= 2].copy()
+                conf_summary["avg_bpm"]     = conf_summary["avg_bpm"].round(2)
+                conf_summary["avg_premium"] = conf_summary["avg_premium"].round(2)
+                conf_summary["success_pct"] = conf_summary["success_pct"].round(1)
+                conf_summary["to_tier_label"] = conf_summary["to_tier"].map(TIER_LABELS)
+
+                if conf_summary.empty:
+                    st.info("Not enough conference-level data — need at least 2 comparables per league. Try relaxing BPM or position filters.")
+                else:
+                    # One expander per tier, sorted by avg_bpm within tier
+                    for tier_key in TIER_ORDER:
+                        tier_label = TIER_LABELS[tier_key]
+                        tc = conf_summary[conf_summary["to_tier"] == tier_key].sort_values("avg_bpm", ascending=False)
+                        if tc.empty:
+                            continue
+
+                        best_conf  = tc.iloc[0]
+                        best_badge = "🟢" if best_conf["success_pct"] >= 55 else ("🟡" if best_conf["success_pct"] >= 38 else "🔴")
+
+                        with st.expander(
+                            f"{tier_label}  ·  Best: **{best_conf['to_conference']}** "
+                            f"({best_badge} {best_conf['avg_bpm']:+.1f} BPM · {best_conf['success_pct']:.0f}% success)",
+                            expanded=(tier_key == tier_summary.iloc[0]["to_tier"]),
+                        ):
+                            display_conf = tc[["to_conference", "avg_bpm", "avg_premium", "success_pct", "n"]].rename(columns={
+                                "to_conference": "Conference",
+                                "avg_bpm":       "Avg BPM After",
+                                "avg_premium":   "Avg Premium",
+                                "success_pct":   "Success %",
+                                "n":             "Comparables (n)",
+                            })
+
+                            # Color code success %
+                            def color_conf_row(row):
+                                pct = row["Success %"]
+                                if pct >= 55:
+                                    color = "#1a3d20"
+                                elif pct >= 38:
+                                    color = "#3d3000"
+                                else:
+                                    color = "#4a1010"
+                                return [f"background-color: {color}"] * len(row)
+
+                            col_conf_chart, col_conf_table = st.columns([3, 2])
+                            with col_conf_chart:
+                                fig_conf = px.bar(
+                                    tc.sort_values("avg_bpm"),
+                                    x="avg_bpm", y="to_conference",
+                                    color="success_pct",
+                                    color_continuous_scale=["#e74c3c", "#f39c12", "#2ecc71"],
+                                    range_color=[0, 75],
+                                    orientation="h",
+                                    text="avg_bpm",
+                                    labels={
+                                        "avg_bpm":       "Avg BPM After",
+                                        "to_conference": "",
+                                        "success_pct":   "Success %",
+                                    },
+                                )
+                                fig_conf.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.3)
+                                fig_conf.update_traces(texttemplate="%{text:+.2f}", textposition="outside")
+                                fig_conf.update_layout(
+                                    margin=dict(t=5, b=5), coloraxis_showscale=False,
+                                    height=max(180, len(tc) * 32),
+                                )
+                                st.plotly_chart(fig_conf, use_container_width=True)
+                            with col_conf_table:
+                                st.dataframe(
+                                    display_conf.style.apply(color_conf_row, axis=1),
+                                    use_container_width=True, hide_index=True,
+                                )
+
+                # ── SECTION C: Comparable Players ─────────────────────────────────
+                st.markdown("---")
+                st.subheader("Comparable Historical Transfers")
+                st.caption("Players with your position, origin tier, and similar BPM who have already made this move.")
+
                 comp["to_tier_label"] = comp["to_tier"].map(TIER_LABELS)
                 comp["height_str"]    = comp["height_in"].apply(
                     lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
                 )
-                show = comp[[
-                    "full_name", "position", "height_str", "weight_lbs", "birth_year",
-                    "season", "from_school", "to_school", "to_tier_label",
-                    "bpm_before", "bpm_after", "transfer_premium", "transfer_verdict"
+
+                show_comp = comp[[
+                    "full_name", "position", "height_str", "weight_lbs",
+                    "season", "from_school", "to_school", "to_conference", "to_tier_label",
+                    "bpm_before", "bpm_before_adj", "bpm_after",
+                    "transfer_premium", "transfer_verdict",
                 ]].rename(columns={
                     "full_name":        "Player",
                     "position":         "Pos",
                     "height_str":       "Height",
-                    "weight_lbs":       "Wt (lbs)",
-                    "birth_year":       "Born",
+                    "weight_lbs":       "Wt",
                     "season":           "Season",
                     "from_school":      "From",
                     "to_school":        "To",
-                    "to_tier_label":    "Dest Tier",
+                    "to_conference":    "Conference",
+                    "to_tier_label":    "Tier",
                     "bpm_before":       "BPM Before",
+                    "bpm_before_adj":   "BPM Before (adj)",
                     "bpm_after":        "BPM After",
                     "transfer_premium": "Premium",
                     "transfer_verdict": "Verdict",
                 })
 
-                def color_verdict(val):
+                def _color_verdict_cell(val):
                     colors = {
                         "Exceeded Expectations": "#2d1a4a",
                         "High Value":            "#1a4731",
@@ -872,11 +1325,77 @@ with tab5:
                     }
                     return f"background-color: {colors.get(val, '')}"
 
+                comp["role"] = comp["bpm_after"].apply(
+                    lambda b: ("🌟 Starter" if b >= 3.0 else "💪 Key Guy" if b >= 1.0
+                               else "✅ Solid Backup" if b >= -0.5 else "📋 Project")
+                    if pd.notna(b) else "—"
+                )
+                show_comp["D1 Role"] = comp["role"]
                 st.dataframe(
-                    show.style.applymap(color_verdict, subset=["Verdict"]),
+                    show_comp.style.applymap(_color_verdict_cell, subset=["Verdict"]),
                     use_container_width=True,
                     hide_index=True,
                 )
+
+                # ── SECTION D: Programs Where Players Like You Thrived ─────────
+                st.markdown("---")
+                st.subheader("🏫 Programs Where Players Like You Thrived")
+                st.caption(
+                    "Specific schools where players with your position, origin tier, and BPM range "
+                    "historically produced — sorted best to worst. Use this to target your list."
+                )
+                try:
+                    school_sql = """
+                        SELECT
+                            t_to.name                                   AS school_name,
+                            c_dest.name                                 AS conference,
+                            c_dest.tier                                 AS tier,
+                            COUNT(*)                                    AS n_comparable,
+                            ROUND(AVG(its.bpm_after)::NUMERIC,2)       AS avg_bpm_after,
+                            COUNT(CASE WHEN its.transfer_verdict IN
+                                ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END) AS success_n
+                        FROM individual_transfer_scores its
+                        JOIN transfers tr ON its.transfer_id = tr.transfer_id
+                        JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
+                        JOIN conferences c_dest ON t_to.conference_id = c_dest.conference_id
+                        WHERE its.position = %s
+                          AND its.from_tier = %s
+                          AND its.bpm_before BETWEEN %s AND %s
+                          AND its.to_tier NOT IN ('sub_d1','international')
+                        GROUP BY t_to.name, c_dest.name, c_dest.tier
+                        HAVING COUNT(*) >= 2
+                        ORDER BY avg_bpm_after DESC NULLS LAST
+                        LIMIT 25
+                    """
+                    school_df = query(school_sql, [
+                        fit_position, fit_tier,
+                        fit_bpm - BPM_TOL * 1.5, fit_bpm + BPM_TOL * 1.5,
+                    ])
+                    if school_df.empty:
+                        st.info("Not enough comparable transfers to show school breakdown yet.")
+                    else:
+                        school_df["to_tier_label"] = school_df["tier"].map(TIER_LABELS)
+                        school_df["success_pct"]   = (school_df["success_n"] / school_df["n_comparable"] * 100).round(0)
+                        school_df["avg_bpm_after"] = school_df["avg_bpm_after"].apply(
+                            lambda b: f"{b:+.2f}" if pd.notna(b) else "—"
+                        )
+                        st.dataframe(
+                            school_df[[
+                                "school_name","conference","to_tier_label",
+                                "n_comparable","avg_bpm_after","success_pct",
+                            ]].rename(columns={
+                                "school_name":   "School",
+                                "conference":    "Conference",
+                                "to_tier_label": "Tier",
+                                "n_comparable":  "Players Like You",
+                                "avg_bpm_after": "Avg BPM They Achieved",
+                                "success_pct":   "Success %",
+                            }),
+                            use_container_width=True,
+                            hide_index=True,
+                        )
+                except Exception:
+                    pass
 
         except Exception as e:
             st.error(f"Query error: {e}")
@@ -886,18 +1405,26 @@ with tab5:
 # TAB 6 — Coach Search
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab6:
-    st.title("Coach Search Tool")
-    st.markdown(
-        "You know what your program needs. Filter by position, tier, physical profile, "
-        "and production — see which historical transfers fit and what to expect."
+    st.title("🏀 Coach Search — Portal Targeting")
+
+    coach_mode = st.radio(
+        "Search mode",
+        ["🔍 By Pre-Transfer Profile", "🎯 By Expected Contribution"],
+        horizontal=True,
+        key="coach_mode",
+        help=(
+            "Pre-Transfer Profile: find players based on what they did at their previous school. "
+            "Expected Contribution: tell us what you need — we show who historically delivered it."
+        ),
     )
 
-    # ── Section 1: Your Program ───────────────────────────────────────────────
-    st.markdown("### Your Program")
-    c1, c2, c3 = st.columns(3)
-    with c1:
+    # ── Shared: Your Program inputs (used by both modes) ─────────────────────
+    st.markdown("---")
+    prog_a, prog_b = st.columns(2)
+    with prog_a:
+        st.markdown("### Your Program")
         coach_dest_tier = st.selectbox(
-            "Your Program Tier", TIER_ORDER,
+            "Program Tier", TIER_ORDER,
             format_func=lambda x: TIER_LABELS[x], key="coach_dest"
         )
         try:
@@ -908,326 +1435,789 @@ with tab6:
         except Exception:
             tier_confs = []
         coach_conference = st.selectbox(
-            "Your Conference",
-            ["Any"] + tier_confs,
-            key="coach_conf",
-            help="Narrows results to transfers that succeeded specifically within your conference — same tier, different cultures",
+            "Conference (optional)", ["Any"] + tier_confs, key="coach_conf",
+            help="Narrows results to players who transferred into programs in your conference"
         )
-    with c2:
-        coach_season = st.selectbox("Season Focus", ["Any", "2023-24", "2024-25", "2022-23", "2021-22"], key="coach_season")
-        coach_verdict = st.multiselect(
-            "Minimum Verdict",
-            ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"],
-            default=["Exceeded Expectations", "High Value", "Solid Addition"],
-            key="coach_verdict"
+    with prog_b:
+        st.markdown("### Position & Origin")
+        coach_prior_position = st.selectbox(
+            "Position", ["Any", "G", "G/F", "F", "F/C", "C"],
+            key="coach_prior_pos",
+            help="Automatically broadens to adjacent positions (G also returns G/F etc.)",
         )
-    with c3:
         coach_origin_tier = st.selectbox(
-            "Recruit From Tier", ["Any"] + TIER_ORDER,
+            "Recruit From (Origin Tier)", ["Any"] + ALL_TIERS,
             format_func=lambda x: TIER_LABELS.get(x, x), key="coach_origin"
         )
 
+    # ════════════════════════════════════════════════════════════════════════════
+    # TRANSFER POOL — Role-based player finder
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("---")
+    st.markdown("### 🗂️ Transfer Pool — Who Can You Get?")
+    st.caption(
+        "Filter by the role you need. **BPM** = Box Plus/Minus — points above average per 100 possessions. "
+        "Think of it as a player\'s impact score. Higher = more impact. "
+        "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
+    )
 
-    # ── Section 2: What Did They Do Last Season? ──────────────────────────────
-    st.markdown("### What Did They Do Last Season?")
-    st.caption("Filter by the player's actual production and role at their previous school.")
-    cp1, cp2, cp3 = st.columns(3)
-    with cp1:
-        coach_prior_position = st.selectbox(
-            "Their Position Last Season",
-            ["Any", "G", "G/F", "F", "F/C", "C"],
-            key="coach_prior_pos",
-            help="Position they were listed at before transferring",
-        )
-        coach_bpm_min = st.slider("Min BPM Last Season", -5.0, 8.0, 0.0, 0.5, key="coach_bpm")
-    with cp2:
-        coach_usg_min = st.slider("Min USG% Last Season", 10.0, 35.0, 14.0, 1.0, key="coach_usg")
-        coach_h_min, coach_h_max = st.slider(
-            "Height Range (inches)", 68, 88, (70, 84), key="coach_height",
-            help="72=6'0\", 76=6'4\", 80=6'8\""
-        )
-    with cp3:
-        coach_w_min, coach_w_max = st.slider("Weight Range (lbs)", 150, 290, (170, 260), key="coach_weight")
-        coach_birth_min = st.number_input("Born After (year)", 1998, 2007, 2000, key="coach_birth_min")
-        coach_birth_max = st.number_input("Born Before (year)", 1998, 2008, 2006, key="coach_birth_max")
+    TIER_RANK = {"high_major": 1, "high_mid_major": 2, "mid_major": 3, "low_major": 4}
 
-    st.markdown("---")
+    ROLE_OPTIONS = {
+        "Any Role":        (-20, 20),
+        "🌟 Starter":      (3.0, 20),
+        "💪 Key Guy":      (1.0, 3.0),
+        "✅ Solid Backup": (-0.5, 1.0),
+        "📋 Project":      (-20, -0.5),
+    }
 
-    # ── Section 3: What Do You Need From Them This Year? ─────────────────────
-    st.markdown("### What Do You Need From Them This Year?")
-    st.caption("Set the role and position you'll play them in your system. May differ from what they did before.")
-    cr1, cr2, cr3 = st.columns(3)
-    with cr1:
-        coach_target_position = st.selectbox(
-            "Position in Your System",
-            ["Any", "G", "G/F", "F", "F/C", "C"],
-            key="coach_target_pos",
-            help="The position you'll play them — can differ from their prior position (e.g. converting a G/F into a F)",
+    def bpm_to_role(bpm):
+        if pd.isna(bpm):
+            return "—"
+        bpm = float(bpm)
+        if bpm >= 3.0:   return "🌟 Starter"
+        if bpm >= 1.0:   return "💪 Key Guy"
+        if bpm >= -0.5:  return "✅ Solid Backup"
+        return "📋 Project"
+
+    pool_col1, pool_col2, pool_col3, pool_col4 = st.columns(4)
+    with pool_col1:
+        pool_role = st.selectbox(
+            "Target Role",
+            list(ROLE_OPTIONS.keys()),
+            key="pool_role",
+            help="What kind of player are you looking for? Based on their BPM at their previous school.",
         )
-    with cr2:
-        # Roles defined by projected USG% at new tier — MPG data not available
-        role_label_map = {
-            "Any Role":                  (0,   100),
-            "Featured (22%+ USG)":       (22,  100),
-            "Rotation (17–22% USG)":     (17,  22),
-            "Role Player (12–17% USG)":  (12,  17),
+    with pool_col2:
+        pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season")
+    with pool_col3:
+        pool_pos = st.selectbox("Position", ["All", "G", "G/F", "F", "F/C", "C"], key="pool_pos")
+    with pool_col4:
+        pool_show_all = st.checkbox(
+            "Show all tiers (not just in-range)", value=False, key="pool_show_all"
+        )
+
+    bpm_lo, bpm_hi = ROLE_OPTIONS[pool_role]
+
+    pool_sql = """
+        SELECT
+            its.full_name, its.position,
+            its.from_school, its.from_tier,
+            its.to_school, its.to_tier,
+            its.season,
+            its.bpm_before, its.bpm_after,
+            its.usage_before, its.usage_after,
+            its.transfer_verdict, its.recruiting_composite,
+            p.height_in, p.weight_lbs
+        FROM individual_transfer_scores its
+        JOIN players p ON its.player_id = p.player_id
+        WHERE its.bpm_before BETWEEN %s AND %s
+          AND its.to_tier NOT IN ('sub_d1', 'international')
+    """
+    pool_params = [bpm_lo, bpm_hi]
+
+    if pool_season != "All":
+        pool_sql += " AND its.season = %s"
+        pool_params.append(pool_season)
+    if pool_pos != "All":
+        adjacent = {
+            "G": ["G","G/F"], "G/F": ["G","G/F","F"],
+            "F": ["G/F","F","F/C"], "F/C": ["F","F/C","C"], "C": ["F/C","C"],
         }
-        coach_role_preset  = st.selectbox("Projected Role", list(role_label_map.keys()), key="coach_role_preset")
-        coach_proj_usg_min = st.slider("Min Projected USG%", 0.0, 35.0, 0.0, 1.0, key="coach_proj_usg",
-                                       help="Projected usage rate at your program based on historical tier averages")
-    with cr3:
-        if coach_target_position != "Any" and coach_prior_position != "Any" and coach_target_position != coach_prior_position:
-            st.info(f"Converting **{coach_prior_position} → {coach_target_position}**: showing players with the physical and production profile to make that switch.")
+        pos_pool_list = adjacent.get(pool_pos, [pool_pos])
+        pool_sql += f" AND its.position IN ({{','.join(['%s']*len(pos_pool_list))}})"
+        pool_params.extend(pos_pool_list)
 
+    pool_sql += " ORDER BY its.bpm_before DESC NULLS LAST"
+
+    try:
+        pool_df = query(pool_sql, pool_params)
+
+        if pool_df.empty:
+            st.info("No players match that role. Try broadening position or season filters.")
+        else:
+            coach_rank = TIER_RANK.get(coach_dest_tier, 4)
+            pool_df["in_range"] = pool_df["to_tier"].apply(
+                lambda t: TIER_RANK.get(t, 4) >= coach_rank
+            )
+            if not pool_show_all:
+                pool_df = pool_df[pool_df["in_range"]].copy()
+
+            pool_df["fit"]            = pool_df["in_range"].map({True: "🟢 In Your Range", False: "⚪ Higher Tier"})
+            pool_df["projected_role"] = pool_df["bpm_before"].apply(bpm_to_role)
+            pool_df["to_tier_label"]  = pool_df["to_tier"].map(TIER_LABELS)
+            pool_df["from_tier_label"]= pool_df["from_tier"].map(TIER_LABELS)
+            pool_df["height_str"]     = pool_df["height_in"].apply(
+                lambda x: f"{int(x)//12}\'{int(x)%12}\"" if pd.notna(x) else "—"
+            )
+
+            starters_n = (pool_df["bpm_before"] >= 3.0).sum()
+            key_guys_n = ((pool_df["bpm_before"] >= 1.0) & (pool_df["bpm_before"] < 3.0)).sum()
+            in_range_n = pool_df["in_range"].sum()
+            sv = {"High Value", "Solid Addition", "Exceeded Expectations"}
+            success_n  = pool_df["transfer_verdict"].isin(sv).sum()
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("In Pool", len(pool_df))
+            m2.metric("🟢 In Your Range", int(in_range_n))
+            m3.metric("🌟 Starter-Level", int(starters_n))
+            m4.metric("💪 Key Guys", int(key_guys_n))
+
+            display_pool = pool_df[[
+                "fit", "projected_role", "full_name", "position", "height_str", "weight_lbs",
+                "season", "from_school", "from_tier_label",
+                "to_school", "to_tier_label",
+                "bpm_before", "bpm_after", "usage_before",
+                "transfer_verdict",
+            ]].rename(columns={
+                "fit":              "Range",
+                "projected_role":   "Role",
+                "full_name":        "Player",
+                "position":         "Pos",
+                "height_str":       "Height",
+                "weight_lbs":       "Wt",
+                "season":           "Season",
+                "from_school":      "From",
+                "from_tier_label":  "From Tier",
+                "to_school":        "To",
+                "to_tier_label":    "To Tier",
+                "bpm_before":       "BPM (prev school)",
+                "bpm_after":        "BPM (after move)",
+                "usage_before":     "USG% (prev)",
+                "transfer_verdict": "Outcome",
+            })
+
+            def _color_pool_row(row):
+                if "🟢" in str(row.get("Range", "")):
+                    return ["background-color: rgba(255,107,0,0.12)"] * len(row)
+                return [""] * len(row)
+
+            st.dataframe(
+                display_pool.style.apply(_color_pool_row, axis=1),
+                use_container_width=True,
+                hide_index=True,
+                height=420,
+            )
+            st.caption(
+                "**BPM (prev school)** = what you'd see scouting them in the portal. "
+                "**Outcome** = what they actually delivered after transferring (historical context)."
+            )
+
+            # Also show unscored transfers (portal activity from all 364 schools, no BPM req)
+            if pool_show_all or pool_role == "Any Role":
+                try:
+                    unscored_sql = """
+                        SELECT DISTINCT
+                            p.full_name, p.position,
+                            t_from.name AS from_school, c_from.tier AS from_tier,
+                            t_to.name AS to_school, c_to.tier AS to_tier,
+                            tr.season
+                        FROM transfers tr
+                        JOIN players p ON tr.player_id = p.player_id
+                        JOIN teams t_from ON tr.from_team_id = t_from.team_id
+                        JOIN teams t_to ON tr.to_team_id = t_to.team_id
+                        JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
+                        JOIN conferences c_to ON t_to.conference_id = c_to.conference_id
+                        LEFT JOIN individual_transfer_scores its ON tr.transfer_id = its.transfer_id
+                        WHERE its.transfer_id IS NULL
+                          AND c_to.tier NOT IN ('sub_d1','international')
+                          AND c_from.tier NOT IN ('international')
+                    """
+                    u_params = []
+                    if pool_season != "All":
+                        unscored_sql += " AND tr.season = %s"
+                        u_params.append(pool_season)
+                    if pool_pos != "All":
+                        pos_list2 = adjacent.get(pool_pos, [pool_pos])
+                        unscored_sql += f" AND p.position IN ({','.join(['%s']*len(pos_list2))})"
+                        u_params.extend(pos_list2)
+                    unscored_sql += " ORDER BY tr.season DESC, t_to.name LIMIT 500"
+
+                    u_df = query(unscored_sql, u_params or None)
+                    if not u_df.empty:
+                        u_df["to_tier_label"]   = u_df["to_tier"].map(TIER_LABELS)
+                        u_df["from_tier_label"] = u_df["from_tier"].map(TIER_LABELS)
+                        with st.expander(f"📊 {len(u_df)} Additional Portal Entries (No BPM Yet)", expanded=False):
+                            st.caption("These transfers are in the portal record but don't have CBB Reference BPM data yet. Name + school movement is confirmed.")
+                            st.dataframe(
+                                u_df[["full_name","position","season","from_school","from_tier_label","to_school","to_tier_label"]].rename(columns={
+                                    "full_name":"Player","position":"Pos","season":"Season",
+                                    "from_school":"From","from_tier_label":"From Tier",
+                                    "to_school":"To","to_tier_label":"To Tier",
+                                }),
+                                use_container_width=True, hide_index=True, height=300,
+                            )
+                except Exception:
+                    pass
+    except Exception as e:
+        st.info(f"Pool query error: {e}")
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # INTERNATIONAL MARKET — Overseas prospects entering D1
+    # ════════════════════════════════════════════════════════════════════════════
     st.markdown("---")
+    st.markdown("### 🌍 International Market — Overseas Prospects")
+    st.caption(
+        "Players who came from international professional leagues to D1 — treated the same as portal "
+        "transfers. No pre-college BPM (different game), so they're ranked by **composite rating** "
+        "and **what they delivered after arriving**. A 7-footer from Spain could be your next starter."
+    )
 
-    if st.button("Search Players", type="primary", key="coach_search_btn"):
-        # Pull league avg USG change for each origin_tier → dest_tier → position move
-        proj_sql = """
-            SELECT origin_tier, position,
-                   COALESCE(avg_usg_change, 0) AS avg_usg_change
-            FROM league_transfer_trends
-            WHERE dest_tier = %s
-            GROUP BY origin_tier, position, avg_usg_change
-        """
-        try:
-            proj_df = query(proj_sql, [coach_dest_tier])
-            proj_lookup = {
-                (row["origin_tier"], row["position"]): float(row["avg_usg_change"] or 0)
-                for _, row in proj_df.iterrows()
+    intl_pool_col1, intl_pool_col2 = st.columns(2)
+    with intl_pool_col1:
+        intl_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="intl_season")
+    with intl_pool_col2:
+        intl_pos = st.selectbox("Position", ["All", "G", "G/F", "F", "F/C", "C"], key="intl_pos")
+
+    COUNTRY_FLAGS = {
+        "France": "🇫🇷", "Spain": "🇪🇸", "Germany": "🇩🇪", "Italy": "🇮🇹",
+        "Lithuania": "🇱🇹", "Serbia": "🇷🇸", "Russia": "🇷🇺", "Israel": "🇮🇱",
+        "Andorra": "🇦🇩", "Latvia": "🇱🇻", "Croatia": "🇭🇷", "Slovenia": "🇸🇮",
+    }
+
+    intl_sql = """
+        SELECT
+            p.full_name, p.position,
+            p.height_in, p.weight_lbs, p.recruiting_composite,
+            COALESCE(p.origin_country, t_from.name) AS origin_country,
+            COALESCE(p.origin_league, '') AS origin_league,
+            t_from.name AS from_club,
+            t_to.name AS to_school,
+            c_to.tier AS to_tier,
+            tr.season,
+            ps_after.bpm AS bpm_after,
+            ps_after.ppg,
+            ps_after.usg_pct AS usage_after,
+            ps_after.ts_pct AS efficiency_after,
+            pps.ppg AS pre_d1_ppg,
+            pps.rpg AS pre_d1_rpg,
+            pps.apg AS pre_d1_apg,
+            pps.league_name AS pre_d1_league
+        FROM transfers tr
+        JOIN players p ON tr.player_id = p.player_id
+        JOIN teams t_from ON tr.from_team_id = t_from.team_id
+        JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
+        JOIN teams t_to ON tr.to_team_id = t_to.team_id
+        JOIN conferences c_to ON t_to.conference_id = c_to.conference_id
+        LEFT JOIN player_seasons ps_after ON tr.player_id = ps_after.player_id
+            AND ps_after.season = tr.season
+            AND ps_after.team_id = tr.to_team_id
+        LEFT JOIN player_pre_d1_stats pps ON p.player_id = pps.player_id
+        WHERE c_from.tier = 'international'
+          AND c_to.tier NOT IN ('sub_d1', 'international')
+        ORDER BY COALESCE(ps_after.bpm, -99) DESC, p.recruiting_composite DESC NULLS LAST
+    """
+    intl_params = []
+    if intl_season != "All":
+        intl_sql = intl_sql.replace(
+            "ORDER BY",
+            f"AND tr.season = '{intl_season}' ORDER BY"
+        )
+    if intl_pos != "All":
+        adjacent = {
+            "G": ["G","G/F"], "G/F": ["G","G/F","F"],
+            "F": ["G/F","F","F/C"], "F/C": ["F","F/C","C"], "C": ["F/C","C"],
+        }
+        pos_list = adjacent.get(intl_pos, [intl_pos])
+        pos_clause = f"AND p.position IN ({chr(44).join([chr(39)+x+chr(39) for x in pos_list])})"
+        intl_sql = intl_sql.replace("ORDER BY", pos_clause + " ORDER BY")
+
+    try:
+        intl_df = query(intl_sql, intl_params or None)
+        if intl_df.empty:
+            st.info("No international transfers found for these filters.")
+        else:
+            intl_df["to_tier_label"] = intl_df["to_tier"].map(TIER_LABELS)
+            intl_df["height_str"] = intl_df["height_in"].apply(
+                lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
+            )
+            intl_df["role"] = intl_df["bpm_after"].apply(bpm_to_role)
+            intl_df["composite_str"] = intl_df["recruiting_composite"].apply(
+                lambda x: f"{x:.0f}" if pd.notna(x) else "—"
+            )
+            intl_df["flag_country"] = intl_df["origin_country"].apply(
+                lambda c: f"{COUNTRY_FLAGS.get(str(c), '🌍')} {c}" if pd.notna(c) and str(c) else "🌍"
+            )
+
+            im1, im2, im3, im4 = st.columns(4)
+            im1.metric("International Prospects", len(intl_df))
+            im2.metric("With D1 BPM Data", int(intl_df["bpm_after"].notna().sum()))
+            im3.metric("With Pre-D1 Stats", int(intl_df["pre_d1_ppg"].notna().sum()))
+            im4.metric("Avg Composite Rating",
+                       f"{intl_df['recruiting_composite'].mean():.0f}"
+                       if intl_df["recruiting_composite"].notna().any() else "—")
+
+            # Build display — show pre-D1 stats when BPM not available
+            display_cols = {
+                "role":          "D1 Role",
+                "full_name":     "Player",
+                "position":      "Pos",
+                "height_str":    "Height",
+                "weight_lbs":    "Wt",
+                "composite_str": "Rating",
+                "flag_country":  "Country",
+                "origin_league": "League",
+                "from_club":     "Club",
+                "to_school":     "D1 School",
+                "to_tier_label": "Tier",
+                "season":        "Season",
+                "pre_d1_ppg":    "Pre-D1 PPG",
+                "pre_d1_rpg":    "Pre-D1 RPG",
+                "bpm_after":     "BPM (D1)",
+                "usage_after":   "USG%",
             }
-        except Exception:
-            proj_lookup = {}
+            available = [c for c in display_cols if c in intl_df.columns]
+            display_intl = intl_df[available].rename(columns=display_cols)
 
-        usg_preset_min, usg_preset_max = role_label_map[coach_role_preset]
+            def _color_intl_row(row):
+                role = str(row.get("D1 Role", ""))
+                if "🌟" in role:
+                    return ["background-color: rgba(255,107,0,0.18)"] * len(row)
+                if "💪" in role:
+                    return ["background-color: rgba(255,140,56,0.10)"] * len(row)
+                return [""] * len(row)
 
-        coach_sql = """
-            SELECT
-                its.full_name,
-                its.position,
-                its.height_in,
-                its.weight_lbs,
-                its.birth_year,
-                its.recruiting_composite,
-                its.from_school,
-                its.from_tier,
-                its.to_school,
-                its.to_tier,
-                c_dest.name AS to_conference,
-                its.season,
-                its.bpm_before,
-                its.bpm_after,
-                its.bpm_change,
-                its.usage_before,
-                its.usage_after,
-                its.usg_change,
-                its.obpm_after,
-                its.dbpm_after,
-                its.context_score,
-                its.transfer_premium,
-                its.transfer_verdict
-            FROM individual_transfer_scores its
-            JOIN transfers tr       ON its.transfer_id    = tr.transfer_id
-            JOIN teams t_dest       ON tr.to_team_id      = t_dest.team_id
-            JOIN conferences c_dest ON t_dest.conference_id = c_dest.conference_id
-            WHERE its.to_tier = %s
-              AND its.transfer_verdict = ANY(%s)
-        """
-        coach_params = [
-            coach_dest_tier,
-            coach_verdict,
-        ]
+            st.dataframe(
+                display_intl.style.apply(_color_intl_row, axis=1),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.caption(
+                "**Rating** = On3 composite (0–100). **Pre-D1 PPG/RPG** = European league stats before coming to D1. "
+                "**BPM (D1)** = what they delivered after arriving. Use composite + physical profile + pre-D1 stats for scouting."
+            )
+    except Exception as e:
+        st.info(f"International query error: {e}")
 
-        if coach_conference != "Any":
-            coach_sql += " AND c_dest.name = %s"
-            coach_params.append(coach_conference)
-        if coach_origin_tier != "Any":
-            coach_sql += " AND its.from_tier = %s"
-            coach_params.append(coach_origin_tier)
-        if coach_prior_position != "Any":
-            coach_sql += " AND its.position = %s"
-            coach_params.append(coach_prior_position)
-        if coach_season != "Any":
-            coach_sql += " AND its.season = %s"
-            coach_params.append(coach_season)
-        # If coach specified a target position different from prior, broaden to include
-        # adjacent positions that commonly convert (e.g. G/F if looking for F)
-        if coach_target_position != "Any" and coach_prior_position == "Any":
-            adjacent = {
-                "G": ["G", "G/F"],
-                "G/F": ["G", "G/F", "F"],
-                "F": ["G/F", "F", "F/C"],
-                "F/C": ["F", "F/C", "C"],
-                "C": ["F/C", "C"],
-            }
-            target_pool = adjacent.get(coach_target_position, [coach_target_position])
-            coach_sql += f" AND its.position IN ({','.join(['%s']*len(target_pool))})"
-            coach_params.extend(target_pool)
+    # ════════════════════════════════════════════════════════════════════════════
+    # MODE 1 — Pre-Transfer Profile Search
+    # ════════════════════════════════════════════════════════════════════════════
+    if coach_mode == "🔍 By Pre-Transfer Profile":
+        st.markdown("---")
+        st.markdown("### Pre-Transfer Production & Physical Profile")
+        st.caption(
+            "Filters apply to stats at their **previous school**. "
+            "Physical categories are position-relative. "
+            "**Strong Match** = production AND physical fit. **Solid Match** = one matches."
+        )
 
-        coach_sql += " AND (its.height_in IS NULL OR its.height_in BETWEEN %s AND %s)"
-        coach_sql += " AND (its.weight_lbs IS NULL OR its.weight_lbs BETWEEN %s AND %s)"
-        coach_sql += " AND (its.birth_year IS NULL OR its.birth_year BETWEEN %s AND %s)"
-        coach_sql += " ORDER BY its.context_score DESC NULLS LAST"
-        coach_params += [coach_h_min, coach_h_max, coach_w_min, coach_w_max, coach_birth_min, coach_birth_max]
+        fp1, fp2, fp3 = st.columns(3)
+        with fp1:
+            coach_bpm_min = st.slider("Min BPM (pre-transfer)", -5.0, 8.0, 0.0, 0.5, key="coach_bpm",
+                                      help="0.0 = at least average production at previous school")
+            coach_usg_min = st.slider("Min USG% (pre-transfer)", 10.0, 35.0, 14.0, 1.0, key="coach_usg",
+                                      help="14% = floor for a meaningful role player")
+        with fp2:
+            coach_height_cat = st.selectbox(
+                "Height Profile", ["Any", "Short", "Average", "Tall"], key="coach_height_cat",
+                help="Relative to their position — 6'4\" C is Short; 6'4\" G is Tall"
+            )
+            coach_weight_cat = st.selectbox(
+                "Build", ["Any", "Lean", "Average", "Heavy"], key="coach_weight_cat",
+                help="Position-relative body type"
+            )
+        with fp3:
+            coach_birth_min = st.number_input("Born After (year)", 1998, 2007, 2000, key="coach_birth_min")
+            coach_birth_max = st.number_input("Born Before (year)", 1998, 2008, 2006, key="coach_birth_max")
+            coach_season_p1 = st.selectbox(
+                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="coach_season_p1"
+            )
 
-        try:
-            results = query(coach_sql, coach_params)
+        coach_show_all = st.checkbox(
+            "Show transfers to all D1 tiers (not just your tier)",
+            value=True, key="coach_show_all",
+            help="Unchecked = only players who transferred into programs at your exact tier.",
+        )
 
-            if results.empty:
-                st.warning("No players match those filters. Try loosening position, BPM, or physical range.")
-            else:
-                # ── Project role at coach's tier ──────────────────────────────
-                def project_role(row):
-                    key = (row["from_tier"], row["position"])
-                    usg_change = proj_lookup.get(key, 0)
-                    proj_usg = round(max(0, float(row["usage_before"] or 18) + usg_change), 1)
-                    if proj_usg >= 22:
-                        role = "Featured"
-                    elif proj_usg >= 17:
-                        role = "Rotation"
-                    elif proj_usg >= 12:
-                        role = "Role Player"
-                    else:
-                        role = "Depth"
-                    return pd.Series({"proj_usg": proj_usg, "proj_role": role})
+        if st.button("Search Players", type="primary", key="coach_search_btn_p1"):
+            coach_sql = """
+                SELECT
+                    its.full_name, its.position, its.height_in, its.weight_lbs,
+                    its.birth_year, its.recruiting_composite,
+                    its.from_school, its.from_tier,
+                    its.to_school, its.to_tier,
+                    c_dest.name AS to_conference,
+                    its.season,
+                    its.bpm_before, its.bpm_before_adj, its.bpm_after, its.bpm_change,
+                    its.usage_before, its.usage_after, its.usg_change,
+                    its.context_score, its.transfer_premium, its.transfer_verdict
+                FROM individual_transfer_scores its
+                JOIN transfers tr       ON its.transfer_id      = tr.transfer_id
+                JOIN teams t_dest       ON tr.to_team_id        = t_dest.team_id
+                JOIN conferences c_dest ON t_dest.conference_id = c_dest.conference_id
+                WHERE its.to_tier NOT IN ('sub_d1', 'international')
+                  AND (its.birth_year IS NULL OR its.birth_year BETWEEN %s AND %s)
+            """
+            coach_params = [coach_birth_min, coach_birth_max]
 
-                proj_cols = results.apply(project_role, axis=1)
-                results = pd.concat([results, proj_cols], axis=1)
+            d1_origins = {"high_major", "high_mid_major", "mid_major", "low_major"}
+            if coach_origin_tier in d1_origins:
+                coach_sql += " AND its.bpm_before >= %s AND (its.usage_before IS NULL OR its.usage_before >= %s)"
+                coach_params += [coach_bpm_min, coach_usg_min]
+            elif coach_origin_tier == "Any":
+                coach_sql += """
+                  AND (its.from_tier IN ('sub_d1','international') OR its.bpm_before >= %s)
+                  AND (its.from_tier IN ('sub_d1','international') OR its.usage_before IS NULL OR its.usage_before >= %s)
+                """
+                coach_params += [coach_bpm_min, coach_usg_min]
 
-                # Classify: Strong Match (all criteria met) vs Match (within tolerance)
-                def classify_match(row):
-                    bpm_ok   = float(row["bpm_before"]   or 0) >= coach_bpm_min
-                    usg_ok   = float(row["usage_before"] or 0) >= coach_usg_min
-                    role_ok  = (row["proj_usg"] >= usg_preset_min) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max)
-                    proj_ok  = row["proj_usg"] >= coach_proj_usg_min
+            if coach_origin_tier != "Any":
+                coach_sql += " AND its.from_tier = %s"
+                coach_params.append(coach_origin_tier)
 
-                    bpm_close  = float(row["bpm_before"]   or 0) >= coach_bpm_min  - 3.0
-                    usg_close  = float(row["usage_before"] or 0) >= coach_usg_min  - 5.0
-                    role_close = (row["proj_usg"] >= usg_preset_min - 5.0) and (usg_preset_max >= 100 or row["proj_usg"] <= usg_preset_max + 5.0)
-                    proj_close = row["proj_usg"] >= coach_proj_usg_min - 5.0
+            if coach_prior_position != "Any":
+                adjacent = {
+                    "G": ["G","G/F"], "G/F": ["G","G/F","F"],
+                    "F": ["G/F","F","F/C"], "F/C": ["F","F/C","C"], "C": ["F/C","C"],
+                }
+                pos_pool = adjacent.get(coach_prior_position, [coach_prior_position])
+                coach_sql += f" AND its.position IN ({','.join(['%s']*len(pos_pool))})"
+                coach_params.extend(pos_pool)
 
-                    if bpm_ok and usg_ok and role_ok and proj_ok:
-                        return "Strong Match"
-                    elif bpm_close and usg_close and role_close and proj_close:
-                        return "Match"
-                    return None
+            if coach_conference != "Any":
+                coach_sql += " AND c_dest.name = %s"
+                coach_params.append(coach_conference)
 
-                results["match_quality"] = results.apply(classify_match, axis=1)
-                results = results[results["match_quality"].notna()].copy()
-                results["_sort"] = results["match_quality"].map({"Strong Match": 0, "Match": 1})
-                verdict_rank = {"Exceeded Expectations": 0, "High Value": 1, "Solid Addition": 2, "Neutral": 3, "Didn't Fit": 4}
-                results["_vsort"] = results["transfer_verdict"].map(verdict_rank).fillna(5)
-                results = results.sort_values(["_sort", "_vsort", "context_score"], ascending=[True, True, False]).drop(columns=["_sort", "_vsort"])
+            if coach_season_p1 != "Any":
+                coach_sql += " AND its.season = %s"
+                coach_params.append(coach_season_p1)
+
+            if not coach_show_all:
+                coach_sql += " AND its.to_tier = %s"
+                coach_params.append(coach_dest_tier)
+
+            coach_sql += " ORDER BY its.bpm_before DESC NULLS LAST"
+
+            try:
+                results = query(coach_sql, coach_params)
 
                 if results.empty:
-                    st.warning("No players match those filters. Try loosening BPM, USG%, or role preset.")
+                    st.warning("No players match. Try broadening position, lowering BPM/USG floors, or changing origin tier.")
                 else:
-                    label = TIER_LABELS.get(coach_dest_tier, coach_dest_tier)
-                    conf_str = f" ({coach_conference})" if coach_conference != "Any" else ""
-                    pos_str = f" — targeting {coach_prior_position} → {coach_target_position}" if (
-                        coach_target_position != "Any" and coach_prior_position != "Any"
-                        and coach_target_position != coach_prior_position
-                    ) else (f" — {coach_target_position}s" if coach_target_position != "Any" else "")
-                    strong_n = (results["match_quality"] == "Strong Match").sum()
-                    match_n  = (results["match_quality"] == "Match").sum()
-                    st.success(f"**{strong_n} strong matches · {match_n} matches** at {label}{conf_str}{pos_str}")
+                    results["to_tier_label"]   = results["to_tier"].map(TIER_LABELS)
+                    results["from_tier_label"] = results["from_tier"].map(TIER_LABELS)
+                    my_tier_label = TIER_LABELS.get(coach_dest_tier, coach_dest_tier)
 
-                    # Role distribution
-                    role_colors = {
-                        "Featured":    "#2ecc71",
-                        "Rotation":    "#f39c12",
-                        "Role Player": "#2e75b6",
-                        "Depth":       "#7f8c8d",
+                    results["height_cat"] = results.apply(
+                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "—", axis=1)
+                    results["weight_cat"] = results.apply(
+                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "—", axis=1)
+
+                    def _phys_ok_p1(row):
+                        h = (coach_height_cat == "Any") or (row["height_cat"] == coach_height_cat)
+                        w = (coach_weight_cat == "Any") or (row["weight_cat"] == coach_weight_cat)
+                        return h and w
+
+                    def _stats_ok_p1(row):
+                        bpm = pd.isna(row["bpm_before"]) or float(row["bpm_before"]) >= coach_bpm_min
+                        usg = pd.isna(row["usage_before"]) or float(row["usage_before"]) >= coach_usg_min
+                        return bpm and usg
+
+                    results["_phys_ok"]  = results.apply(_phys_ok_p1, axis=1)
+                    results["_stats_ok"] = results.apply(_stats_ok_p1, axis=1)
+                    results["match_quality"] = results.apply(
+                        lambda r: (
+                            "Strong Match" if r["_stats_ok"] and r["_phys_ok"]
+                            else "Solid Match" if r["_stats_ok"] or r["_phys_ok"]
+                            else None
+                        ), axis=1,
+                    )
+                    results = results[results["match_quality"].notna()].copy()
+                    results["_mrank"]     = results["match_quality"].map({"Strong Match": 0, "Solid Match": 1})
+                    results["_tier_rank"] = (results["to_tier"] != coach_dest_tier).astype(int)
+                    results = results.sort_values(
+                        ["_mrank", "_tier_rank", "bpm_before"], ascending=[True, True, False]
+                    ).drop(columns=["_mrank", "_tier_rank", "_phys_ok", "_stats_ok"])
+
+                    if results.empty:
+                        st.warning("No matches after physical filtering. Try 'Any' for height/build.")
+                    else:
+                        strong_n = (results["match_quality"] == "Strong Match").sum()
+                        solid_n  = (results["match_quality"] == "Solid Match").sum()
+                        same_tier = results[results["to_tier"] == coach_dest_tier]
+                        SV = {"High Value", "Solid Addition", "Exceeded Expectations"}
+                        conf_str = f" ({coach_conference})" if coach_conference != "Any" else ""
+
+                        if len(same_tier) > 0:
+                            sp = same_tier["transfer_verdict"].isin(SV).mean() * 100
+                            st.success(
+                                f"**{strong_n} Strong · {solid_n} Solid** · "
+                                f"{len(same_tier)} went to {my_tier_label}{conf_str} — "
+                                f"{sp:.0f}% High Value or Solid Addition"
+                            )
+                        else:
+                            st.info(
+                                f"**{strong_n} Strong · {solid_n} Solid** · "
+                                f"None went to {my_tier_label} — enable 'Show all D1 tiers'."
+                            )
+
+                        if len(same_tier) >= 3:
+                            col_v, col_bx = st.columns(2)
+                            with col_v:
+                                st.markdown(f"**Outcomes at {my_tier_label}**")
+                                vc = same_tier["transfer_verdict"].value_counts().reset_index()
+                                vc.columns = ["Verdict", "Count"]
+                                fv = px.bar(vc, x="Verdict", y="Count", color="Verdict",
+                                            color_discrete_map=VERDICT_COLORS,
+                                            category_orders={"Verdict": VERDICT_ORDER})
+                                fv.update_layout(margin=dict(t=10, b=10), showlegend=False)
+                                st.plotly_chart(fv, use_container_width=True)
+                            with col_bx:
+                                st.markdown("**BPM Before → After**")
+                                bm = same_tier[["bpm_before","bpm_after"]].dropna().melt(
+                                    var_name="When", value_name="BPM")
+                                bm["When"] = bm["When"].map({"bpm_before":"Before","bpm_after":"After"})
+                                fb = px.box(bm, x="When", y="BPM", color="When",
+                                            color_discrete_map={"Before":"#2e75b6","After":"#2ecc71"})
+                                fb.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
+                                fb.update_layout(margin=dict(t=10, b=10), showlegend=False)
+                                st.plotly_chart(fb, use_container_width=True)
+
+                        mc1, mc2, mc3, mc4 = st.columns(4)
+                        mc1.metric("Strong Matches", strong_n)
+                        mc2.metric("Solid Matches", solid_n)
+                        mc3.metric("Avg BPM Before",
+                                   f"{results['bpm_before'].mean():.2f}" if results["bpm_before"].notna().any() else "—")
+                        mc4.metric(f"Avg BPM After ({my_tier_label})",
+                                   f"{same_tier['bpm_after'].mean():.2f}" if len(same_tier) > 0 else "—")
+
+                        st.subheader("Matching Players")
+                        st.caption(
+                            "**Strong Match** = production + physical fit. "
+                            "**Solid Match** = one but not both. "
+                            f"Players who went to {my_tier_label} appear first."
+                        )
+                        results["height_str"] = results["height_in"].apply(
+                            lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—")
+                        results["cbb_ref"] = results["full_name"].apply(
+                            lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
+                        p1_cols = {
+                            "match_quality":"Match","full_name":"Player","cbb_ref":"CBB Ref",
+                            "position":"Pos","height_str":"Height","height_cat":"Ht Profile",
+                            "weight_lbs":"Wt","weight_cat":"Build","birth_year":"Born",
+                            "season":"Season","from_school":"From","from_tier_label":"From Tier",
+                            "bpm_before":"BPM Before","bpm_before_adj":"BPM Before (adj)",
+                            "usage_before":"USG Before",
+                            "to_school":"To School","to_tier_label":"To Tier",
+                            "bpm_after":"BPM After","context_score":"Context Score",
+                            "transfer_verdict":"Verdict",
+                        }
+                        st.dataframe(
+                            results[[c for c in p1_cols if c in results.columns]].rename(columns=p1_cols),
+                            use_container_width=True, hide_index=True,
+                            column_config={
+                                "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
+                                "Match": st.column_config.TextColumn("Match", width="small"),
+                            },
+                        )
+            except Exception as e:
+                st.error(f"Query error: {e}")
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # MODE 2 — Expected Contribution Search
+    # ════════════════════════════════════════════════════════════════════════════
+    else:
+        st.markdown("---")
+        st.markdown("### What You Need from the Transfer")
+        st.caption(
+            "Define the contribution you expect at your level. We find every historical transfer "
+            "who delivered that — then show you **what they looked like before transferring** "
+            "so you know the pre-transfer profile to target in the portal."
+        )
+
+        ec1, ec2 = st.columns(2)
+        with ec1:
+            ec_bpm_min = st.slider(
+                "Min BPM After Transfer", -3.0, 8.0, 1.0, 0.5, key="ec_bpm_min",
+                help="Minimum acceptable BPM at your tier. 0.5 = Solid Addition floor. 2.0 = High Value."
+            )
+            ec_usg_after = st.slider(
+                "Min Usage % After Transfer", 10.0, 35.0, 15.0, 1.0, key="ec_usg_after",
+                help="Minimum usage rate you need from this player."
+            )
+            ec_usg_filter = st.checkbox("Apply usage filter", value=False, key="ec_usg_filter")
+        with ec2:
+            ec_verdict = st.multiselect(
+                "Verdict Filter",
+                VERDICT_ORDER,
+                default=["High Value", "Solid Addition", "Exceeded Expectations"],
+                key="ec_verdict",
+                help="Only show players who achieved at least this outcome after transferring."
+            )
+            ec_season_p2 = st.selectbox(
+                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="ec_season_p2"
+            )
+
+        if st.button("Find the Profile", type="primary", key="coach_search_btn_p2"):
+            ec_sql = """
+                SELECT
+                    its.full_name, its.position, its.height_in, its.weight_lbs,
+                    its.birth_year, its.recruiting_composite,
+                    its.from_school, its.from_tier,
+                    its.to_school, its.to_tier,
+                    c_dest.name AS to_conference,
+                    its.season,
+                    its.bpm_before, its.bpm_before_adj,
+                    its.usage_before, its.usage_after,
+                    its.bpm_after, its.context_score,
+                    its.transfer_premium, its.transfer_verdict
+                FROM individual_transfer_scores its
+                JOIN transfers tr       ON its.transfer_id      = tr.transfer_id
+                JOIN teams t_dest       ON tr.to_team_id        = t_dest.team_id
+                JOIN conferences c_dest ON t_dest.conference_id = c_dest.conference_id
+                WHERE its.to_tier = %s
+                  AND its.bpm_after >= %s
+            """
+            ec_params = [coach_dest_tier, ec_bpm_min]
+
+            if ec_verdict:
+                ec_sql += f" AND its.transfer_verdict IN ({','.join(['%s']*len(ec_verdict))})"
+                ec_params.extend(ec_verdict)
+
+            if ec_usg_filter:
+                ec_sql += " AND (its.usage_after IS NULL OR its.usage_after >= %s)"
+                ec_params.append(ec_usg_after)
+
+            if coach_origin_tier != "Any":
+                ec_sql += " AND its.from_tier = %s"
+                ec_params.append(coach_origin_tier)
+
+            if coach_prior_position != "Any":
+                adjacent = {
+                    "G": ["G","G/F"], "G/F": ["G","G/F","F"],
+                    "F": ["G/F","F","F/C"], "F/C": ["F","F/C","C"], "C": ["F/C","C"],
+                }
+                pos_pool = adjacent.get(coach_prior_position, [coach_prior_position])
+                ec_sql += f" AND its.position IN ({','.join(['%s']*len(pos_pool))})"
+                ec_params.extend(pos_pool)
+
+            if coach_conference != "Any":
+                ec_sql += " AND c_dest.name = %s"
+                ec_params.append(coach_conference)
+
+            if ec_season_p2 != "Any":
+                ec_sql += " AND its.season = %s"
+                ec_params.append(ec_season_p2)
+
+            ec_sql += " ORDER BY its.bpm_after DESC, its.context_score DESC"
+
+            try:
+                ec_results = query(ec_sql, ec_params)
+                my_tier_label = TIER_LABELS.get(coach_dest_tier, coach_dest_tier)
+
+                if ec_results.empty:
+                    st.warning(
+                        f"No transfers to {my_tier_label} matched that contribution level. "
+                        "Try lowering the Min BPM or Context Score, or expanding position/origin."
+                    )
+                else:
+                    ec_results["to_tier_label"]   = ec_results["to_tier"].map(TIER_LABELS)
+                    ec_results["from_tier_label"] = ec_results["from_tier"].map(TIER_LABELS)
+                    ec_results["height_str"]       = ec_results["height_in"].apply(
+                        lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—")
+                    ec_results["height_cat"] = ec_results.apply(
+                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "—", axis=1)
+                    ec_results["weight_cat"] = ec_results.apply(
+                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "—", axis=1)
+
+                    # ── Summary: what is the pre-transfer profile of these players? ──
+                    st.success(
+                        f"**{len(ec_results)} transfers** to **{my_tier_label}** delivered "
+                        f"≥ {ec_bpm_min:+.1f} BPM after transferring."
+                    )
+
+                    profile_cols = st.columns(4)
+                    bpm_b_valid = ec_results["bpm_before"].dropna()
+                    bpm_b_adj_valid = ec_results["bpm_before_adj"].dropna()
+                    usg_b_valid = ec_results["usage_before"].dropna()
+                    profile_cols[0].metric(
+                        "Avg BPM Before (raw)",
+                        f"{bpm_b_valid.mean():.2f}" if len(bpm_b_valid) else "—",
+                        help="Average raw BPM at previous school — this is what to look for in the portal"
+                    )
+                    profile_cols[1].metric(
+                        "Avg BPM Before (adj)",
+                        f"{bpm_b_adj_valid.mean():.2f}" if len(bpm_b_adj_valid) else "—",
+                        help="Competition-adjusted BPM — accounts for whether they played against high or low competition"
+                    )
+                    profile_cols[2].metric(
+                        "Avg USG% Before",
+                        f"{usg_b_valid.mean():.1f}%" if len(usg_b_valid) else "—",
+                        help="Average usage rate at previous school"
+                    )
+                    profile_cols[3].metric(
+                        "Avg BPM After",
+                        f"{ec_results['bpm_after'].mean():.2f}",
+                        help="Average BPM they delivered after arriving at this tier"
+                    )
+
+                    st.markdown("---")
+
+                    # ── Profile breakdown: what did they look like before? ──────────
+                    col_origin, col_phys = st.columns(2)
+                    with col_origin:
+                        st.markdown(f"**Where Did They Come From?**")
+                        orig_counts = (
+                            ec_results.groupby(["from_tier_label","position"])
+                            .size().reset_index(name="n")
+                        )
+                        fig_orig = px.bar(
+                            orig_counts, x="from_tier_label", y="n", color="position",
+                            barmode="stack",
+                            labels={"from_tier_label":"Origin Tier","n":"Players","position":"Pos"},
+                            color_discrete_sequence=px.colors.qualitative.Set2,
+                        )
+                        fig_orig.update_layout(margin=dict(t=10, b=10))
+                        st.plotly_chart(fig_orig, use_container_width=True)
+
+                    with col_phys:
+                        st.markdown(f"**Pre-Transfer BPM Distribution**")
+                        bpm_hist = ec_results["bpm_before"].dropna()
+                        if len(bpm_hist) >= 3:
+                            fig_hist = px.histogram(
+                                bpm_hist, nbins=12,
+                                labels={"value":"BPM Before Transfer","count":"Players"},
+                                color_discrete_sequence=["#2e75b6"],
+                            )
+                            fig_hist.add_vline(
+                                x=bpm_hist.mean(), line_dash="dash", line_color="#2ecc71",
+                                annotation_text=f"Avg: {bpm_hist.mean():.2f}",
+                                annotation_position="top right",
+                            )
+                            fig_hist.update_layout(margin=dict(t=10, b=10), showlegend=False)
+                            st.plotly_chart(fig_hist, use_container_width=True)
+                        else:
+                            st.info("Not enough D1-origin players to show BPM distribution.")
+
+                    # ── Full results table ─────────────────────────────────────────
+                    st.markdown("---")
+                    st.subheader("Players Who Delivered — and Their Pre-Transfer Profile")
+                    st.caption(
+                        "These players transferred to your tier and met your contribution target. "
+                        "Their **pre-transfer stats** (BPM Before, USG Before) are what you're looking "
+                        "for in your next portal recruit."
+                    )
+                    ec_results["cbb_ref"] = ec_results["full_name"].apply(
+                        lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
+
+                    ec_display_cols = {
+                        "full_name":"Player","cbb_ref":"CBB Ref",
+                        "position":"Pos","height_str":"Height","height_cat":"Ht Profile",
+                        "weight_lbs":"Wt","weight_cat":"Build","birth_year":"Born",
+                        "from_school":"From","from_tier_label":"From Tier",
+                        "bpm_before":"BPM Before","bpm_before_adj":"BPM Before (adj)",
+                        "usage_before":"USG Before",
+                        "season":"Season","to_school":"To School","to_conference":"Conference",
+                        "bpm_after":"BPM After","context_score":"Context Score",
+                        "transfer_premium":"Premium","transfer_verdict":"Verdict",
                     }
-                    role_vc = results["proj_role"].value_counts().reset_index()
-                    role_vc.columns = ["Role", "Count"]
-                    col_role, col_verdict = st.columns(2)
-                    with col_role:
-                        st.markdown("**Projected Role Breakdown**")
-                        fig_role = px.bar(
-                            role_vc, x="Role", y="Count",
-                            color="Role", color_discrete_map=role_colors,
-                        )
-                        fig_role.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                        st.plotly_chart(fig_role, use_container_width=True)
-                    with col_verdict:
-                        st.markdown("**Transfer Verdict Breakdown**")
-                        vc2 = results["transfer_verdict"].value_counts().reset_index()
-                        vc2.columns = ["Verdict", "Count"]
-                        fig_v = px.bar(
-                            vc2, x="Verdict", y="Count",
-                            color="Verdict", color_discrete_map=VERDICT_COLORS,
-                        )
-                        fig_v.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                        st.plotly_chart(fig_v, use_container_width=True)
-
-                    # Summary metrics
-                    mc1, mc2, mc3, mc4 = st.columns(4)
-                    mc1.metric("Avg Context Score",  f"{results['context_score'].mean():.2f}")
-                    mc2.metric("Avg Proj USG%",       f"{results['proj_usg'].mean():.1f}%")
-                    mc3.metric("Avg BPM Before",      f"{results['bpm_before'].mean():.2f}")
-                    mc4.metric("Avg BPM After",       f"{results['bpm_after'].mean():.2f}")
-
-                    # OBPM vs DBPM
-                    if results["obpm_after"].notna().any():
-                        st.subheader("Offensive vs Defensive Contribution")
-                        obpm_avg = pd.DataFrame({
-                            "Component": ["OBPM (Offense)", "DBPM (Defense)"],
-                            "Value": [results["obpm_after"].mean(), results["dbpm_after"].mean()],
-                        })
-                        fig_ob = px.bar(
-                            obpm_avg, x="Component", y="Value", color="Component",
-                            color_discrete_map={"OBPM (Offense)": "#2e75b6", "DBPM (Defense)": "#c00000"},
-                        )
-                        fig_ob.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
-                        fig_ob.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                        st.plotly_chart(fig_ob, use_container_width=True)
-
-                    # Full results table
-                    st.subheader("Matching Players — Strong Matches First")
-                    st.caption("Proj USG% shows what this player projects to at YOUR tier. CBB Ref links open on Sports Reference.")
-                    results["height_str"] = results["height_in"].apply(
-                        lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
-                    )
-                    results["cbb_ref"] = results["full_name"].apply(
-                        lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ', '+')}"
-                    )
-                    display_cols = {
-                        "match_quality":    "Match",
-                        "full_name":        "Player",
-                        "cbb_ref":          "CBB Ref",
-                        "position":         "Pos (Last Season)",
-                        "height_str":       "Height",
-                        "weight_lbs":       "Wt",
-                        "birth_year":       "Born",
-                        "from_school":      "From School",
-                        "from_tier":        "From Tier",
-                        "to_school":        "To School",
-                        "to_conference":    "Conference",
-                        "season":           "Season",
-                        "proj_role":        "Proj Role (Your Tier)",
-                        "proj_usg":         "Proj USG%",
-                        "usage_before":     "USG Before",
-                        "bpm_before":       "BPM Before",
-                        "obpm_after":       "OBPM",
-                        "dbpm_after":       "DBPM",
-                        "context_score":    "Context Score",
-                        "transfer_verdict": "Verdict",
-                    }
-                    display_df = (
-                        results[[c for c in display_cols if c in results.columns]]
-                        .rename(columns=display_cols)
-                    )
                     st.dataframe(
-                        display_df,
-                        use_container_width=True,
-                        hide_index=True,
+                        ec_results[[c for c in ec_display_cols if c in ec_results.columns]]
+                        .rename(columns=ec_display_cols),
+                        use_container_width=True, hide_index=True,
                         column_config={
                             "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
-                            "Match": st.column_config.TextColumn("Match", width="small"),
                         },
                     )
-
-        except Exception as e:
-            st.error(f"Query error: {e}")
+            except Exception as e:
+                st.error(f"Query error: {e}")

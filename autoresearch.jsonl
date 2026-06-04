@@ -1,0 +1,3 @@
+{"type":"config","name":"transfer-data-sources","metricName":"transfers_loaded","metricUnit":"count","bestDirection":"higher"}
+{"run":1,"commit":"82bb2a8","metric":1859,"metrics":{"scored_transfers":1039,"unique_players":1654},"status":"keep","description":"baseline - On3+Kaggle+International","timestamp":1780532415,"segment":0}
+{"run":2,"commit":"82bb2a8","metric":1858,"metrics":{"scored_transfers":1047,"unique_players":1652},"status":"keep","description":"fixed BYU/Detroit/Bethune-Cookman school name mappings - +8 scored","timestamp":1780533355,"segment":0}

@@ -1,10 +1,37 @@
 """
-Scrape real player advanced stats (BPM, TS%, USG%) from College Basketball Reference.
-Only fetches schools that appear in our transfer dataset — avoids scraping all 350 programs.
-Outputs: data/raw/cbb_player_stats.csv
+Scrape real player advanced stats from College Basketball Reference.
 
+Why CBB Reference?
+  BPM (Box Plus/Minus) is the core metric of the scoring model.
+  It measures a player's impact in points above average per 100 possessions,
+  adjusted for pace and opponent strength. It's the closest D1 basketball has
+  to a single-number "how good is this player" measure that's available for free.
+
+  CBB Reference is the only public source for BPM at the college level.
+
+How scraping works:
+  Each school-season page (e.g. sports-reference.com/cbb/schools/duke/men/2024.html)
+  has an advanced stats table (id="players_advanced") embedded in an HTML comment
+  to avoid search-engine indexing. We extract the comment, parse the table with
+  BeautifulSoup + pd.read_html, and keep BPM, OBPM, DBPM, TS%, USG%, G columns.
+
+Scope — only schools involved in our transfers:
+  Scraping all 350 D1 programs would take hours and most data would be unused.
+  We query the DB for (school, season) pairs where the school sent or received
+  a transfer, then also fetch the prior season for each from_school so that
+  bpm_before is real data, not estimated.
+
+Resume support:
+  Progress is saved to cbb_player_stats.csv every 25 schools. Re-running the
+  scraper after interruption will skip already-done school-seasons.
+
+Rate limiting:
+  3-second sleep between requests. CBB Reference will 429 if hit too fast.
+  Three consecutive 429s trigger a save-and-stop to avoid bans.
+
+Outputs: data/raw/cbb_player_stats.csv
 Run: python etl/scrape_cbb_reference.py
-Then re-run: python etl/load_real_data.py  (it will use this file to override estimated stats)
+Then: python etl/load_real_data.py
 """
 
 import re
@@ -29,6 +56,7 @@ HEADERS = {
 
 # CBB Reference uses year = end of season (2024 = 2023-24 season)
 SEASON_TO_YEAR = {
+    "2016-17": 2017, "2017-18": 2018, "2018-19": 2019, "2019-20": 2020,
     "2020-21": 2021, "2021-22": 2022,
     "2022-23": 2023, "2023-24": 2024, "2024-25": 2025,
 }
@@ -252,10 +280,145 @@ SCHOOL_SLUG_MAP = {
     "Marist":              "marist",
     "Canisius":            "canisius",
     "Quinnipiac":          "quinnipiac",
+    # Schools where auto-slug fails: "St." → CBB uses "state", not "st"
+    "North Carolina St.":  "north-carolina-state",
+    "San Jose St.":        "san-jose-state",
+    "McNeese St.":         "mcneese-state",
+    "Nicholls St.":        "nicholls-state",
+    "Arkansas St.":        "arkansas-state",
+    "Montana St.":         "montana-state",
+    "South Dakota St.":    "south-dakota-state",
+    "North Dakota St.":    "north-dakota-state",
+    "Weber St.":           "weber-state",
+    "Sacramento St.":      "sacramento-state",
+    "Portland St.":        "portland-state",
+    "Southeast Missouri St.": "southeast-missouri-state",
+    "Tennessee St.":       "tennessee-state",
+    "Mississippi Valley St.": "mississippi-valley-state",
+    "Idaho St.":           "idaho-state",
+    "Tennessee Martin":    "tennessee-martin",
+    "East Tennessee St.":  "east-tennessee-state",
+    "Morehead St.":        "morehead-state",
+    "Long Beach St.":      "long-beach-state",
+    "Cal St. Bakersfield": "cal-state-bakersfield",
+    "Cal St. Fullerton":   "cal-state-fullerton",
+    "Cal St. Northridge":  "cal-state-northridge",
+    # Schools with non-standard slugs on CBB Reference
+    "Louisiana Lafayette": "louisiana",
+    "Louisiana Monroe":    "louisiana-monroe",
+    "Louisiana Tech":      "louisiana-tech",
+    "Detroit Mercy":       "detroit-mercy",
+    "Detroit":             "detroit-mercy",
+    "Bethune Cookman":     "bethune-cookman",
+    "Gardner Webb":        "gardner-webb",
+    "George Washington":   "george-washington",
+    "Grand Canyon":        "grand-canyon",
+    "High Point":          "high-point",
+    "Houston Baptist":     "houston-baptist",
+    "Houston Christian":   "houston-christian",
+    "Incarnate Word":      "incarnate-word",
+    "Jacksonville":        "jacksonville",
+    "Le Moyne":            "le-moyne",
+    "Lipscomb":            "lipscomb",
+    "Longwood":            "longwood",
+    "Mercer":              "mercer",
+    "Merrimack":           "merrimack",
+    "Monmouth":            "monmouth",
+    "Montana":             "montana",
+    "New Orleans":         "new-orleans",
+    "North Alabama":       "north-alabama",
+    "North Carolina A&T":  "north-carolina-at",
+    "North Carolina Central": "north-carolina-central",
+    "North Dakota":        "north-dakota",
+    "North Florida":       "north-florida",
+    "Northern Arizona":    "northern-arizona",
+    "Northern Colorado":   "northern-colorado",
+    "Northern Iowa":       "northern-iowa",
+    "Northern Kentucky":   "northern-kentucky",
+    "Oral Roberts":        "oral-roberts",
+    "Penn":                "pennsylvania",
+    "Prairie View A&M":    "prairie-view",
+    "Presbyterian":        "presbyterian",
+    "Princeton":           "princeton",
+    "Radford":             "radford",
+    "Robert Morris":       "robert-morris",
+    "Sacred Heart":        "sacred-heart",
+    "Saint Joseph's":      "saint-josephs-pa",
+    "Saint Peter's":       "saint-peters",
+    "Samford":             "samford",
+    "San Diego":           "san-diego",
+    "Seattle":             "seattle",
+    "South Alabama":       "south-alabama",
+    "South Dakota":        "south-dakota",
+    "Southeastern Louisiana": "southeastern-louisiana",
+    "Southern Miss":       "southern-miss",
+    "Southern Utah":       "southern-utah",
+    "St. Bonaventure":     "st-bonaventure",
+    "Stetson":             "stetson",
+    "Tarleton St.":        "tarleton-state",
+    "Temple":              "temple",
+    "Tennessee Tech":      "tennessee-tech",
+    "Texas St.":           "texas-state",
+    "Troy":                "troy",
+    "UC Davis":            "uc-davis",
+    "UC Riverside":        "uc-riverside",
+    "UC San Diego":        "uc-san-diego",
+    "UC Santa Barbara":    "uc-santa-barbara",
+    "UNC Asheville":       "unc-asheville",
+    "UNC Greensboro":      "unc-greensboro",
+    "UNC Wilmington":      "unc-wilmington",
+    "Utah Valley":         "utah-valley",
+    "Valparaiso":          "valparaiso",
+    "Wagner":              "wagner",
+    "Western Carolina":    "western-carolina",
+    "Western Illinois":    "western-illinois",
+    "Wofford":             "wofford",
+    "Yale":                "yale",
+    "Columbia":            "columbia",
+    "Cornell":             "cornell",
+    "Dartmouth":           "dartmouth",
+    "Brown":               "brown",
+    "Harvard":             "harvard",
+    "Denver":              "denver",
+    "Cal Poly":            "cal-poly",
+    "Cal Baptist":         "california-baptist",
+    "Abilene Christian":   "abilene-christian",
+    "Austin Peay":         "austin-peay",
+    "Bryant":              "bryant",
+    "Campbell":            "campbell",
+    "Central Arkansas":    "central-arkansas",
+    "Central Michigan":    "central-michigan",
+    "Charleston Southern": "charleston-southern",
+    "Chattanooga":         "chattanooga",
+    "Coastal Carolina":    "coastal-carolina",
+    "College of Charleston": "college-of-charleston",
+    "Eastern Illinois":    "eastern-illinois",
+    "Eastern Kentucky":    "eastern-kentucky",
+    "Eastern Michigan":    "eastern-michigan",
+    "Eastern Washington":  "eastern-washington",
+    "Fairleigh Dickinson": "fairleigh-dickinson",
+    "Florida Gulf Coast":  "florida-gulf-coast",
+    "Fort Wayne":          "purdue-fort-wayne",
+    "Georgia Southern":    "georgia-southern",
+    "Hampton":             "hampton",
+    "Idaho":               "idaho",
+    "IUPUI":               "iupui",
+    "LIU Brooklyn":        "long-island-university",
+    "New Mexico St.":      "new-mexico-state",
+    "Nebraska Omaha":      "nebraska-omaha",
+    "Queens":              "queens-nc",
+    "St. Thomas":          "st-thomas-mn",
+    "Stonehill":           "stonehill",
 }
 
 
 def get_slug(school_name: str) -> str | None:
+    """Return the CBB Reference URL slug for a school.
+
+    SCHOOL_SLUG_MAP covers known mismatches (St. vs state, abbreviations).
+    The auto-generator handles the majority of schools that follow the
+    standard lowercase-hyphen pattern.
+    """
     if school_name in SCHOOL_SLUG_MAP:
         return SCHOOL_SLUG_MAP[school_name]
     # Auto-generate slug: lowercase, spaces → hyphens, remove punctuation
@@ -264,6 +427,18 @@ def get_slug(school_name: str) -> str | None:
 
 
 def scrape_school_season(school: str, season: str) -> pd.DataFrame | str | None:
+    """
+    Fetch the advanced stats table for one school-season from CBB Reference.
+
+    Returns:
+      pd.DataFrame  — stats table (Player, G, BPM, OBPM, DBPM, TS%, USG%)
+      "rate_limited" — 429 received; caller should back off
+      None          — page not found, parsing failed, or season not in SEASON_TO_YEAR
+
+    The advanced table is embedded in an HTML comment on the page — CBB Reference
+    hides it to prevent search indexing. We find the comment containing
+    "players_advanced" and parse the table from inside it.
+    """
     year = SEASON_TO_YEAR.get(season)
     if not year:
         return None
@@ -275,7 +450,6 @@ def scrape_school_season(school: str, season: str) -> pd.DataFrame | str | None:
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         if resp.status_code == 429:
-            # Rate-limited — back off and signal caller
             time.sleep(60)
             return "rate_limited"
         if resp.status_code != 200:
@@ -290,12 +464,18 @@ def scrape_school_season(school: str, season: str) -> pd.DataFrame | str | None:
                 table = inner.find("table", {"id": "players_advanced"})
                 if table:
                     df = pd.read_html(StringIO(str(table)))[0]
-                    # Drop separator rows (where Player == 'Player')
+                    # Drop separator rows (repeated header rows CBB Reference inserts every 20 rows)
                     df = df[df["Player"] != "Player"].copy()
                     df = df[df["Player"].notna()].copy()
                     df["school"]  = school
                     df["season"]  = season
-                    return df[["Player", "Pos", "G", "TS%", "USG%", "BPM", "OBPM", "DBPM", "school", "season"]]
+                    keep = ["Player", "Pos", "G", "TS%", "USG%", "BPM", "OBPM", "DBPM", "school", "season"]
+                    for col in ("Prev. School", "Prior School"):
+                        if col in df.columns:
+                            df["prev_school"] = df[col].astype(str).replace("nan", "")
+                            keep.append("prev_school")
+                            break
+                    return df[[c for c in keep if c in df.columns]]
     except Exception:
         pass
     return None
@@ -305,8 +485,8 @@ def main():
     conn = psycopg2.connect(**DB_CONFIG)
     cur  = conn.cursor()
 
-    # Fetch transfer-season pairs AND the prior season for each from_school,
-    # so bpm_before uses real stats instead of estimates.
+    # Build the scrape list: every (school, season) where the school sent or received
+    # a transfer. Also add the prior season for each from_school so bpm_before is real.
     PRIOR = {
         "2021-22": "2020-21",
         "2022-23": "2021-22",

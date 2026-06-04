@@ -1,11 +1,26 @@
 """
-Load real Kaggle data into PostgreSQL.
-  - Transfer records: collegeBasketBallTransferMen.csv (2016-2022)
-  - Team stats:       cbb21.csv through cbb25.csv (wins, ADJOE, ADJDE)
-  - Player stats:     estimated from team ADJOE + player recruiting rating
-  - Real player stats override: data/raw/cbb_player_stats.csv (run scrape_cbb_reference.py first)
+Master ETL script — loads all portal data into PostgreSQL from scratch.
 
-Run: python etl/load_real_data.py
+Sources loaded (in order):
+  1. CBB team stats     cbb21.csv – cbb26.csv → teams + team_seasons
+  2. Kaggle portal      collegeBasketBallTransferMen.csv (2019-2022) → players + transfers
+  3. On3 full portal    on3_transfers_full.csv (2022-2025, all entrants) → players + transfers
+  4. International      data/international_transfers.csv → players + transfers (intl tier)
+  5. CBB player stats   cbb_player_stats.csv → player_seasons UPSERT (real BPM only)
+
+School name normalization:
+  On3 stores names like "Iowa Hawkeyes" or "Louisiana State"; CBB Reference uses "Iowa",
+  "Louisiana Lafayette". SCHOOL_NAME_MAP handles both mascot-stripped and abbreviated forms.
+  match_team() does an exact lookup first, then falls back to case-insensitive and partial match.
+  Sub-D1 schools (JUCO, D2, D3) that fail match_team get routed to get_or_create_sub_d1_team().
+  International origins always go through get_or_create_intl_team().
+
+No estimation:
+  All BPM / TS% / USG% come exclusively from CBB Reference (scrape_cbb_reference.py).
+  Player seasons created before the stat UPSERT are empty placeholders; they only get real
+  numbers once the CBB stat pass finds a matching player name + school + season row.
+
+Run: python3 etl/load_real_data.py
 """
 
 import sys
@@ -102,8 +117,10 @@ def main():
         mapped = CONF_MAP.get(raw_abbr, raw_abbr)
         return conf_by_abbr.get(mapped) or conf_by_name.get(mapped)
 
-    sub_d1_conf_id = conf_by_name.get("Sub-D1")  # catches JUCO/D2/D3 from_schools
-    sub_d1_team_cache: dict[str, int] = {}  # name → team_id (no season key; sub_d1 teams are season-agnostic)
+    sub_d1_conf_id       = conf_by_name.get("Sub-D1")       # JUCO/D2/D3/NAIA domestic origins
+    intl_conf_id         = conf_by_name.get("International") # foreign professional league origins
+    sub_d1_team_cache:   dict[str, int] = {}
+    intl_team_cache:     dict[str, int] = {}
 
     # ── Load CBB team stats → teams + team_seasons ────────────────────────────
     print("Loading team stats from CBB CSVs...")
@@ -146,6 +163,17 @@ def main():
     conn.commit()
     print(f"  {len(team_id_map)} team-season rows loaded")
 
+
+    # Normalize CBB file naming inconsistencies (e.g. cbb26 uses different abbreviations)
+    CBB_CANONICAL = {
+        "N.C. State":  "North Carolina St.",
+        "La Tech":     "Louisiana Tech",
+    }
+    for (name, season), tid in list(team_id_map.items()):
+        canonical = CBB_CANONICAL.get(name)
+        if canonical:
+            team_id_map[(canonical, season)] = tid
+
     # ── Fuzzy team name matcher ───────────────────────────────────────────────
     all_team_names = list({name for name, _ in team_id_map.keys()})
 
@@ -158,7 +186,7 @@ def main():
         "Arkansas State":         "Arkansas St.",
         "Arkansas-Little Rock":   "Little Rock",
         "Ball State":             "Ball St.",
-        "Bethune-Cookman":        "Bethune-Cookman",
+        "Bethune-Cookman":        "Bethune Cookman",
         "Boise State":            "Boise St.",
         "Cal State Bakersfield":  "Cal St. Bakersfield",
         "Cal State Fullerton":    "Cal St. Fullerton",
@@ -220,14 +248,18 @@ def main():
         "Wright State":           "Wright St.",
         "Youngstown State":       "Youngstown St.",
         "UConn":                  "Connecticut",
-        "UCF":                    "Central Florida",
+        "UCF":                    "UCF",
+        "Central Florida":        "UCF",
+        "Texas Christian":        "TCU",
+        "Virginia Commonwealth":  "VCU",
+        "Southern Methodist":     "SMU",
         "UTEP":                   "Texas El Paso",
         "UTSA":                   "UTSA",
-        "VCU":                    "Virginia Commonwealth",
-        "SMU":                    "Southern Methodist",
-        "TCU":                    "Texas Christian",
-        "BYU":                    "Brigham Young",
-        "LSU":                    "LSU",
+        "VCU":                    "VCU",
+        "SMU":                    "SMU",
+        "TCU":                    "TCU",
+        "BYU":                    "BYU",
+                "LSU":                    "LSU",
         "Ole Miss":               "Mississippi",
         "Miami (FL)":             "Miami FL",
         "Miami (Ohio)":           "Miami OH",
@@ -245,6 +277,241 @@ def main():
         "San Jose State":         "San Jose St.",
         "UT Martin":              "Tennessee Martin",
         "Nicholls State":         "Nicholls St.",
+        # On3 team page names include mascot suffix — strip to school name
+        "Ole Miss Rebels":        "Mississippi",
+        "Miami Hurricanes":       "Miami FL",
+        "Miami (FL) Hurricanes":  "Miami FL",
+        "Cleveland State University Vikings": "Cleveland St.",
+        "Chicago State Cougars":  "Chicago St.",
+        "Bethune-Cookman Wildcats": "Bethune Cookman",
+        "Boise State Broncos":    "Boise St.",
+        "Kennesaw State Owls":    "Kennesaw St.",
+        "NC State Wolfpack":      "North Carolina St.",
+        "USF Bulls":              "South Florida",
+        "UTEP Miners":            "Texas El Paso",
+        "UTSA Roadrunners":       "UTSA",
+        "VCU Rams":               "VCU",
+        "SMU Mustangs":           "SMU",
+        "TCU Horned Frogs":       "TCU",
+        "BYU Cougars":            "BYU",
+        "Brigham Young":          "BYU",
+        "Detroit Mercy":          "Detroit",
+        "Detroit Mercy Titans":   "Detroit",
+        "LSU Tigers":             "LSU",
+        "UCF Knights":            "UCF",
+        "UConn Huskies":          "Connecticut",
+        "UAB Blazers":            "UAB",
+        "UNC Tar Heels":          "North Carolina",
+        "Pitt Panthers":          "Pittsburgh",
+        "Gonzaga University Bulldogs": "Gonzaga",
+        "Saint Mary's College of California Gaels": "Saint Mary's CA",
+        "Loyola Chicago Ramblers": "Loyola Chicago",
+        "Belmont University Bruins": "Belmont",
+        "Binghamton University Bearcats": "Binghamton",
+        "Bryant University Bulldogs": "Bryant",
+        "Detroit Mercy Titans":   "Detroit",
+        "Gardner-Webb Bulldogs":  "Gardner Webb",
+        "Fort Lewis College Skyhawks": "Fort Lewis College",  # sub_d1 — handled downstream
+        "Robert Morris Colonials": "Robert Morris",
+        "Jacksonville Dolphins":  "Jacksonville",
+        "Eastern Michigan Eagles": "Eastern Michigan",
+        "Western Kentucky Hilltoppers": "Western Kentucky",
+        "Texas Tech Red Raiders": "Texas Tech",
+        "Minnesota Golden Gophers": "Minnesota",
+        "Providence Friars":      "Providence",
+        "Oakland Golden Grizzlies": "Oakland",
+        "Arizona Wildcats":       "Arizona",
+        "Arizona State Sun Devils": "Arizona St.",
+        "Arkansas Razorbacks":    "Arkansas",
+        "Auburn Tigers":          "Auburn",
+        "California Golden Bears": "California",
+        "Clemson Tigers":         "Clemson",
+        "Connecticut Huskies":    "Connecticut",
+        "Creighton Bluejays":     "Creighton",
+        "DePaul Blue Demons":     "DePaul",
+        "Georgia Bulldogs":       "Georgia",
+        "Georgetown Hoyas":       "Georgetown",
+        "Indiana Hoosiers":       "Indiana",
+        "Iowa Hawkeyes":          "Iowa",
+        "Kansas Jayhawks":        "Kansas",
+        "Kentucky Wildcats":      "Kentucky",
+        "Louisville Cardinals":   "Louisville",
+        "Marquette Golden Eagles": "Marquette",
+        "Maryland Terrapins":     "Maryland",
+        "Michigan Wolverines":    "Michigan",
+        "Michigan State Spartans": "Michigan St.",
+        "Minnesota Golden Gophers": "Minnesota",
+        "Missouri Tigers":        "Missouri",
+        "Nebraska Cornhuskers":   "Nebraska",
+        "North Carolina Tar Heels": "North Carolina",
+        "Notre Dame Fighting Irish": "Notre Dame",
+        "Ohio State Buckeyes":    "Ohio St.",
+        "Oklahoma Sooners":       "Oklahoma",
+        "Oklahoma State Cowboys": "Oklahoma St.",
+        "Oregon Ducks":           "Oregon",
+        "Oregon State Beavers":   "Oregon St.",
+        "Penn State Nittany Lions": "Penn St.",
+        "Purdue Boilermakers":    "Purdue",
+        "Rutgers Scarlet Knights": "Rutgers",
+        "Stanford Cardinal":      "Stanford",
+        "Syracuse Orange":        "Syracuse",
+        "Tennessee Volunteers":   "Tennessee",
+        "Texas Longhorns":        "Texas",
+        "Texas A&M Aggies":       "Texas A&M",
+        "UCLA Bruins":            "UCLA",
+        "USC Trojans":            "USC",
+        "Utah Utes":              "Utah",
+        "Vanderbilt Commodores":  "Vanderbilt",
+        "Virginia Cavaliers":     "Virginia",
+        "Virginia Tech Hokies":   "Virginia Tech",
+        "Washington Huskies":     "Washington",
+        "Washington State Cougars": "Washington St.",
+        "West Virginia Mountaineers": "West Virginia",
+        "Wisconsin Badgers":      "Wisconsin",
+        "Xavier Musketeers":      "Xavier",
+        "Seton Hall Pirates":     "Seton Hall",
+        "St. John's Red Storm":   "St. John's",
+        "Florida Gators":         "Florida",
+        "Florida State Seminoles": "Florida St.",
+        "Georgia Tech Yellow Jackets": "Georgia Tech",
+        "Iowa State Cyclones":    "Iowa St.",
+        "Kansas State Wildcats":  "Kansas St.",
+        "Mississippi State Bulldogs": "Mississippi St.",
+        "Texas A&M Aggies":       "Texas A&M",
+        "Wake Forest Demon Deacons": "Wake Forest",
+        "Duke Blue Devils":       "Duke",
+        "Villanova Wildcats":     "Villanova",
+        # Mascot-suffixed from_school values from On3 team page scraper
+        "LSU Tigers":             "LSU",
+        "SMU Mustangs":           "SMU",
+        "VCU Rams":               "VCU",
+        "TCU Horned Frogs":       "TCU",
+        "UNLV Rebels":            "UNLV",
+        "Utah State Aggies":      "Utah St.",
+        "Iowa State Cyclones":    "Iowa St.",
+        "Iowa Hawkeyes":          "Iowa",
+        "Ohio State Buckeyes":    "Ohio St.",
+        "Penn State Nittany Lions": "Penn St.",
+        "Ole Miss Rebels":        "Mississippi",
+        "Miami Hurricanes":       "Miami FL",
+        "Cleveland State University Vikings": "Cleveland St.",
+        "Chicago State Cougars":  "Chicago St.",
+        "Bethune-Cookman Wildcats": "Bethune Cookman",
+        "Boise State Broncos":    "Boise St.",
+        "NC State Wolfpack":      "North Carolina St.",
+        "Michigan Wolverines":    "Michigan",
+        "Louisville Cardinals":   "Louisville",
+        "Texas Tech Red Raiders": "Texas Tech",
+        "Arizona Wildcats":       "Arizona",
+        "Arizona State Sun Devils": "Arizona St.",
+        "Arkansas Razorbacks":    "Arkansas",
+        "Auburn Tigers":          "Auburn",
+        "California Golden Bears": "California",
+        "Clemson Tigers":         "Clemson",
+        "Connecticut Huskies":    "Connecticut",
+        "Creighton Bluejays":     "Creighton",
+        "DePaul Blue Demons":     "DePaul",
+        "Georgia Bulldogs":       "Georgia",
+        "Georgetown Hoyas":       "Georgetown",
+        "Indiana Hoosiers":       "Indiana",
+        "Kansas Jayhawks":        "Kansas",
+        "Kentucky Wildcats":      "Kentucky",
+        "Marquette Golden Eagles": "Marquette",
+        "Maryland Terrapins":     "Maryland",
+        "Michigan State Spartans": "Michigan St.",
+        "Minnesota Golden Gophers": "Minnesota",
+        "Missouri Tigers":        "Missouri",
+        "Nebraska Cornhuskers":   "Nebraska",
+        "North Carolina Tar Heels": "North Carolina",
+        "Notre Dame Fighting Irish": "Notre Dame",
+        "Oklahoma Sooners":       "Oklahoma",
+        "Oklahoma State Cowboys": "Oklahoma St.",
+        "Oregon Ducks":           "Oregon",
+        "Oregon State Beavers":   "Oregon St.",
+        "Purdue Boilermakers":    "Purdue",
+        "Rutgers Scarlet Knights": "Rutgers",
+        "Stanford Cardinal":      "Stanford",
+        "Syracuse Orange":        "Syracuse",
+        "Tennessee Volunteers":   "Tennessee",
+        "Texas Longhorns":        "Texas",
+        "Texas A&M Aggies":       "Texas A&M",
+        "UCLA Bruins":            "UCLA",
+        "USC Trojans":            "USC",
+        "Utah Utes":              "Utah",
+        "Vanderbilt Commodores":  "Vanderbilt",
+        "Virginia Cavaliers":     "Virginia",
+        "Virginia Tech Hokies":   "Virginia Tech",
+        "Washington Huskies":     "Washington",
+        "Washington State Cougars": "Washington St.",
+        "West Virginia Mountaineers": "West Virginia",
+        "Wisconsin Badgers":      "Wisconsin",
+        "Xavier Musketeers":      "Xavier",
+        "Seton Hall Pirates":     "Seton Hall",
+        "St. John's Red Storm":   "St. John's",
+        "Florida Gators":         "Florida",
+        "Florida State Seminoles": "Florida St.",
+        "Georgia Tech Yellow Jackets": "Georgia Tech",
+        "Kansas State Wildcats":  "Kansas St.",
+        "Mississippi State Bulldogs": "Mississippi St.",
+        "Wake Forest Demon Deacons": "Wake Forest",
+        "Duke Blue Devils":       "Duke",
+        "Villanova Wildcats":     "Villanova",
+        "Gonzaga University Bulldogs": "Gonzaga",
+        "Gonzaga Bulldogs":       "Gonzaga",
+        "Saint Mary's College of California Gaels": "Saint Mary's CA",
+        "Saint Mary's Gaels":     "Saint Mary's CA",
+        "Loyola Chicago Ramblers": "Loyola Chicago",
+        "Belmont University Bruins": "Belmont",
+        "Binghamton University Bearcats": "Binghamton",
+        "Bryant University Bulldogs": "Bryant",
+        "Detroit Mercy Titans":   "Detroit",
+        "Gardner-Webb Bulldogs":  "Gardner Webb",
+        "Robert Morris Colonials": "Robert Morris",
+        "Jacksonville Dolphins":  "Jacksonville",
+        "Eastern Michigan Eagles": "Eastern Michigan",
+        "Western Kentucky Hilltoppers": "Western Kentucky",
+        "UAB Blazers":            "UAB",
+        "UCF Knights":            "UCF",
+        "UConn Huskies":          "Connecticut",
+        "UNC Tar Heels":          "North Carolina",
+        "Pitt Panthers":          "Pittsburgh",
+        "USF Bulls":              "South Florida",
+        "UTEP Miners":            "Texas El Paso",
+        "UTSA Roadrunners":       "UTSA",
+        "BYU Cougars":            "BYU",
+        "Brigham Young":          "BYU",
+        "Detroit Mercy":          "Detroit",
+        "Detroit Mercy Titans":   "Detroit",
+        "Kennesaw State Owls":    "Kennesaw St.",
+        "NC State":               "North Carolina St.",
+        "Boise State":            "Boise St.",
+        "Iowa State":             "Iowa St.",
+        "Kennesaw State":         "Kennesaw St.",
+        "Pennsylvania":           "Penn",
+        "USF":                    "South Florida",
+        "San Jose State":         "San Jose St.",
+        "Cleveland State University": "Cleveland St.",
+        "Tarleton State":         "Tarleton St.",
+        "UT Martin":              "Tennessee Martin",
+        "Nicholls State":         "Nicholls St.",
+        "Gardner-Webb":           "Gardner Webb",
+        "Long Island":            "Long Island University",
+        # Remaining gaps found in on3_transfers_full.csv
+        "USF":                    "South Florida",
+        "San Jose State":         "San Jose St.",
+        "Cleveland State University": "Cleveland St.",
+        "Tarleton State":         "Tarleton St.",
+        "Pennsylvania":           "Penn",
+        "UT Martin":              "Tennessee Martin",
+        "Nicholls State":         "Nicholls St.",
+        "Gardner-Webb":           "Gardner Webb",
+        "Long Island":            "Long Island University",
+        # Non-D1 destinations — route to sub_d1 (handled via get_or_create_sub_d1_team fallback)
+        # "Professional", "NBA G League", "Johnson C. Smith University",
+        # "Midwestern State", "Winston-Salem State", "Garden City Community College"
+        # These are intentionally left out — match_team will return None and
+        # get_or_create_sub_d1_team handles them for from_school; for to_school
+        # we skip non-D1 destinations since we can't get CBB stats there.
     }
 
     def normalize_school(raw: str) -> str:
@@ -287,6 +554,27 @@ def main():
             row = cur.fetchone()
         if row:
             sub_d1_team_cache[name] = row[0]
+            return row[0]
+        return None
+
+    def get_or_create_intl_team(raw: str) -> int | None:
+        """Return (or create) a season-agnostic international team for foreign league origins."""
+        if not raw or str(raw).strip().lower() in ("nan", "none", ""):
+            return None
+        name = str(raw).strip()
+        if name in intl_team_cache:
+            return intl_team_cache[name]
+        cur.execute(
+            "INSERT INTO teams (name, conference_id, season) VALUES (%s,%s,NULL)"
+            " ON CONFLICT DO NOTHING RETURNING team_id",
+            (name, intl_conf_id)
+        )
+        row = cur.fetchone()
+        if not row:
+            cur.execute("SELECT team_id FROM teams WHERE name=%s AND season IS NULL LIMIT 1", (name,))
+            row = cur.fetchone()
+        if row:
+            intl_team_cache[name] = row[0]
             return row[0]
         return None
 
@@ -381,10 +669,12 @@ def main():
     conn.commit()
     print(f"  {inserted_transfers} transfers inserted, {skipped} skipped (unmatched to_school)")
 
-    # ── Load On3 transfers (2023-2025) ────────────────────────────────────────
-    on3_path = DATA_DIR / "on3_transfers_combined.csv"
+    # ── Load On3 transfers (2022-2025) ────────────────────────────────────────
+    # Prefer the full team-page CSV (all portal entrants) over the top-50-only combined CSV.
+    full_path = DATA_DIR / "on3_transfers_full.csv"
+    on3_path  = full_path if full_path.exists() else DATA_DIR / "on3_transfers_combined.csv"
     if on3_path.exists():
-        print("Loading On3 transfers (2023-2025)...")
+        print(f"Loading On3 transfers from {on3_path.name}...")
         on3_df = pd.read_csv(on3_path)
         on3_df = on3_df[on3_df["committed"] == True].copy()
         on3_df = on3_df[on3_df["year"].isin(ON3_YEAR_TO_SEASON.keys())].copy()
@@ -467,7 +757,222 @@ def main():
     else:
         print("No On3 data found — run etl/scrape_on3.py first")
 
-    # ── Apply real CBB Reference player stats (UPSERT — only source of truth for BPM) ──────
+    # ── Load Barttorvik transfers (ALL D1 portal entrants 2021-2026) ─────────────
+    # Source: etl/scrape_barttorvik_transfers.py → data/raw/barttorvik_transfers.csv
+    # Covers every portal entrant across all 364 D1 schools, not just rated players.
+    # No player stats/height/weight here — only name + from/to school + season.
+    # Add Barttorvik-specific abbreviations to the name map before matching
+    SCHOOL_NAME_MAP.update({
+        "A&M-CC":           "Texas A&M Corpus Christi",
+        "SIU-E":            "SIU Edwardsville",
+        "FDU":              "Fairleigh Dickinson",
+        "FGCU":             "Florida Gulf Coast",
+        "UNC-W":            "UNC Wilmington",
+        "UNC-A":            "UNC Asheville",
+        "E. Tennessee St.": "East Tennessee St.",
+        "Miss. Valley St.": "Mississippi Valley St.",
+        "Sac. State":       "Sacramento St.",
+        "S.F. Austin":      "SF Austin",
+        "Charleston":       "Charleston",
+        "N.C. State":       "North Carolina St.",
+        "Purdue Fort Wayne":"Purdue Fort Wayne",
+        "Texas A&M-CC":     "Texas A&M Corpus Christi",
+        "LIU Brooklyn":     "LIU",
+        "UMKC":             "Missouri Kansas City",
+    })
+    # Rebuild all_team_names after map update (ensure normalize looks at fresh list)
+    all_team_names = list({name for name, _ in team_id_map.keys()})
+
+    bart_path = DATA_DIR / "barttorvik_transfers.csv"
+    if bart_path.exists():
+        print("Loading Barttorvik all-portal transfers...")
+        bart_df = pd.read_csv(bart_path)
+        bart_df = bart_df[bart_df["season"].isin(CBB_FILE_TO_SEASON.values())].copy()
+        print(f"  {len(bart_df)} Barttorvik entries to process")
+
+        bart_inserted = bart_skipped = 0
+        for _, row in bart_df.iterrows():
+            season    = str(row["season"]).strip()
+            name      = str(row["player_name"]).strip().title()
+            from_name = str(row["from_school"]).strip()
+            to_name   = str(row["to_school"]).strip()
+
+            if not name or not from_name or not to_name:
+                bart_skipped += 1
+                continue
+
+            # Insert player (no physical data from Barttorvik — COALESCE preserves existing)
+            cur.execute(
+                """INSERT INTO players (full_name)
+                   VALUES (%s)
+                   ON CONFLICT (full_name) DO NOTHING""",
+                (name,)
+            )
+            pid = player_id_map.get(name)
+            if not pid:
+                cur.execute("SELECT player_id FROM players WHERE full_name=%s", (name,))
+                r = cur.fetchone()
+                if r:
+                    player_id_map[name] = r[0]
+                    pid = r[0]
+            if not pid:
+                bart_skipped += 1
+                continue
+
+            to_tid   = match_team(to_name, season)
+            from_tid = match_team(from_name, season) or get_or_create_sub_d1_team(from_name)
+
+            if not to_tid or not from_tid or from_tid == to_tid:
+                bart_skipped += 1
+                continue
+
+            cur.execute(
+                """INSERT INTO transfers (player_id, from_team_id, to_team_id, season, transfer_type)
+                   VALUES (%s,%s,%s,%s,'portal') ON CONFLICT DO NOTHING""",
+                (pid, from_tid, to_tid, season)
+            )
+            bart_inserted += cur.rowcount
+
+            prev_seasons = [s for s in CBB_FILE_TO_SEASON.values() if s < season]
+            if prev_seasons:
+                prev_season = max(prev_seasons)
+                prev_tid    = match_team(from_name, prev_season)
+                if prev_tid:
+                    cur.execute(
+                        "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                        (pid, prev_tid, prev_season)
+                    )
+            cur.execute(
+                "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                (pid, to_tid, season)
+            )
+
+        conn.commit()
+        print(f"  {bart_inserted} Barttorvik transfers inserted, {bart_skipped} skipped")
+    else:
+        print("No Barttorvik transfers CSV — run etl/scrape_barttorvik_transfers.py first")
+
+    # ── Load international transfers (foreign leagues → D1) ───────────────────
+    # Scored like sub_d1: bpm_after only (no pre-D1 stats exist).
+    # Composite rating is the primary scouting signal — no European league tiers.
+    intl_path = Path(__file__).parent.parent / "data" / "international_transfers.csv"
+    if intl_path.exists():
+        print("Loading international transfers...")
+        intl_df = pd.read_csv(intl_path)
+        intl_df = intl_df[intl_df["year"].isin(ON3_YEAR_TO_SEASON.keys())].copy()
+        intl_df["season"] = intl_df["year"].map(ON3_YEAR_TO_SEASON)
+
+        intl_inserted = intl_skipped = 0
+        for _, row in intl_df.iterrows():
+            season    = row["season"]
+            name      = str(row["player_name"]).strip().title()
+            from_name = str(row["from_school"]).strip()
+            to_name   = str(row["to_school"]).strip() if pd.notna(row.get("to_school")) else ""
+
+            if not from_name or not to_name or to_name.lower() in ("nan", ""):
+                intl_skipped += 1
+                continue
+
+            pos_raw        = str(row.get("position", "")).strip()
+            pos_clean      = ON3_POSITION_MAP.get(pos_raw.upper(), "G")
+            composite      = row["recruiting_composite"] if pd.notna(row.get("recruiting_composite")) else None
+            height_in      = parse_height_in(row.get("height")) if pd.notna(row.get("height", None) or float("nan")) else None
+            weight_lbs     = int(row["weight"]) if pd.notna(row.get("weight")) and row.get("weight") else None
+            birth_year     = int(row["birth_year"]) if pd.notna(row.get("birth_year")) and row.get("birth_year") else None
+            origin_country = str(row.get("origin_country", row.get("from_country", ""))).strip() or None
+            origin_league  = str(row.get("origin_league", "")).strip() or None
+
+            cur.execute(
+                """INSERT INTO players (full_name, position, class_year, recruiting_composite,
+                       height_in, weight_lbs, birth_year, origin_country, origin_league)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (full_name) DO UPDATE SET
+                       recruiting_composite = COALESCE(players.recruiting_composite, EXCLUDED.recruiting_composite),
+                       height_in     = COALESCE(players.height_in,     EXCLUDED.height_in),
+                       weight_lbs    = COALESCE(players.weight_lbs,    EXCLUDED.weight_lbs),
+                       birth_year    = COALESCE(players.birth_year,    EXCLUDED.birth_year),
+                       origin_country= COALESCE(players.origin_country,EXCLUDED.origin_country),
+                       origin_league = COALESCE(players.origin_league, EXCLUDED.origin_league)
+                   RETURNING player_id""",
+                (name, pos_clean, str(row.get("class_year", ""))[:10] or None, composite,
+                 height_in, weight_lbs, birth_year, origin_country, origin_league)
+            )
+            result = cur.fetchone()
+            if result:
+                player_id_map[name] = result[0]
+            elif name not in player_id_map:
+                cur.execute("SELECT player_id FROM players WHERE full_name=%s", (name,))
+                r = cur.fetchone()
+                if r:
+                    player_id_map[name] = r[0]
+
+            player_id = player_id_map.get(name)
+            to_tid    = match_team(to_name, season)
+            from_tid  = get_or_create_intl_team(from_name)  # always international origin
+
+            if not player_id or not from_tid or not to_tid:
+                intl_skipped += 1
+                continue
+
+            cur.execute(
+                """INSERT INTO transfers (player_id, from_team_id, to_team_id, season, transfer_type)
+                   VALUES (%s,%s,%s,%s,'portal') ON CONFLICT DO NOTHING""",
+                (player_id, from_tid, to_tid, season)
+            )
+            intl_inserted += cur.rowcount
+
+            # Only create the post-transfer placeholder — no pre-D1 CBB stats for international players
+            cur.execute(
+                "INSERT INTO player_seasons (player_id,team_id,season) VALUES (%s,%s,%s) ON CONFLICT (player_id,team_id,season) DO NOTHING",
+                (player_id, to_tid, season)
+            )
+
+        conn.commit()
+        print(f"  {intl_inserted} international transfers inserted, {intl_skipped} skipped")
+    else:
+        print("No international_transfers.csv found — skipping")
+
+    # ── Load EuroBasket pre-D1 stats into player_pre_d1_stats ────────────────
+    euro_path = DATA_DIR / "eurobasket_stats.csv"
+    if euro_path.exists():
+        print("Loading EuroBasket pre-D1 stats...")
+        euro_df = pd.read_csv(euro_path)
+        euro_df = euro_df[euro_df["ppg"].notna()].copy()  # only rows with actual stats
+        cur.execute("SELECT player_id, LOWER(full_name) FROM players")
+        euro_name_map = {n: pid for pid, n in cur.fetchall()}
+        euro_upserted = 0
+        for _, row in euro_df.iterrows():
+            pid = euro_name_map.get(str(row["player_name"]).strip().lower())
+            if not pid:
+                continue
+            cur.execute(
+                """INSERT INTO player_pre_d1_stats
+                   (player_id, team_name, league_name, country, season,
+                    games, ppg, rpg, apg, mpg, fg_pct, three_pct, source_url)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                   ON CONFLICT (player_id, team_name, season) DO UPDATE SET
+                       ppg    = COALESCE(EXCLUDED.ppg,    player_pre_d1_stats.ppg),
+                       rpg    = COALESCE(EXCLUDED.rpg,    player_pre_d1_stats.rpg),
+                       apg    = COALESCE(EXCLUDED.apg,    player_pre_d1_stats.apg),
+                       mpg    = COALESCE(EXCLUDED.mpg,    player_pre_d1_stats.mpg),
+                       fg_pct = COALESCE(EXCLUDED.fg_pct, player_pre_d1_stats.fg_pct)""",
+                (pid, str(row.get("team_name",""))[:100], str(row.get("league_name",""))[:100],
+                 str(row.get("country",""))[:50], str(row.get("season",""))[:9],
+                 int(row["games"]) if pd.notna(row.get("games")) else None,
+                 row.get("ppg"), row.get("rpg"), row.get("apg"), row.get("mpg"),
+                 row.get("fg_pct"), row.get("three_pct"), str(row.get("source_url",""))[:255])
+            )
+            euro_upserted += cur.rowcount
+        conn.commit()
+        print(f"  {euro_upserted} EuroBasket stat rows upserted")
+    else:
+        print("No eurobasket_stats.csv — run etl/scrape_eurobasket.py to get pre-D1 intl stats")
+
+    # ── Apply real CBB Reference player stats ─────────────────────────────────
+    # This is the UPSERT pass — the only source of truth for BPM, TS%, USG%.
+    # We only update player_seasons rows for transfer players (skip everyone else).
+    # Players with < 12 games get skipped — small-sample BPM is unreliable.
+    # Any |BPM| > 15 is almost certainly a data error; null it out rather than propagate.
     cbb_stats_path = DATA_DIR / "cbb_player_stats.csv"
     if cbb_stats_path.exists():
         print("Applying real CBB Reference player stats...")
@@ -477,10 +982,12 @@ def main():
         cur.execute("SELECT player_id, LOWER(full_name) FROM players")
         name_to_pid = {name: pid for pid, name in cur.fetchall()}
 
+        # Only write stats for players who appear in the transfers table
         cur.execute("SELECT DISTINCT player_id FROM transfers")
         transfer_pids = {r[0] for r in cur.fetchall()}
 
         def get_or_create_team(school, season):
+            """Find or insert a team row — used when CBB Reference has a school not yet in teams."""
             tid = match_team(school, season)
             if tid:
                 return tid
@@ -502,6 +1009,7 @@ def main():
             return tid
 
         def parse_stat(val):
+            """Convert a CBB Reference stat cell to float, returning None for blanks."""
             try:
                 f = float(val)
                 return None if pd.isna(f) else f
@@ -549,6 +1057,24 @@ def main():
                 (pid, tid, season, bpm, obpm, dbpm, ts_pct, usg_pct, games)
             )
             upserted += cur.rowcount
+
+            # Phase 2: backfill missing transfer records from CBB Reference "Prev. School" column
+            # This catches JUCO→D1 and D2→D1 players who never appeared in any portal CSV
+            prev_school_raw = str(row.get("prev_school", "")).strip()
+            if prev_school_raw and prev_school_raw not in ("", "nan", "—"):
+                cur.execute(
+                    "SELECT 1 FROM transfers WHERE player_id=%s AND season=%s LIMIT 1",
+                    (pid, season)
+                )
+                if not cur.fetchone():
+                    from_tid_back = match_team(prev_school_raw, season) or get_or_create_sub_d1_team(prev_school_raw)
+                    to_tid_back   = get_or_create_team(school, season)
+                    if from_tid_back and to_tid_back and from_tid_back != to_tid_back:
+                        cur.execute(
+                            """INSERT INTO transfers (player_id, from_team_id, to_team_id, season, transfer_type)
+                               VALUES (%s,%s,%s,%s,'cbb_backfill') ON CONFLICT DO NOTHING""",
+                            (pid, from_tid_back, to_tid_back, season)
+                        )
 
         conn.commit()
         print(f"  {upserted} player-season rows upserted with real stats ({skipped_real} skipped — not a transfer player or no CBB data)")
