@@ -1,10 +1,18 @@
-# NCAA Transfer Market Analytics
+# NCAA Transfer Portal Analysis
 
-Analyzes NCAA men's basketball transfer portal data (2021–2026, post-NIL era). Classifies programs by conference tier, quantifies player performance before/after transfers using a role- and tier-adjusted scoring model, and outputs data-driven recruitment profile recommendations by league tier.
+Analytics platform for men's college basketball transfers (2020–21 through 2025–26). Scores 3,025 of 8,208 portal entries using Box Plus/Minus, classifies programs by conference tier, and surfaces data-driven recruitment profiles across a 9-tab Streamlit dashboard.
 
-> **3,025 scored transfers · 8,208 total portal entries · CBB Reference + Barttorvik data · 2020–21 through 2025–26 · 350 of 364 D1 schools covered**
+3,025 scored transfers · 8,208 total portal entries · 350 of 364 D1 schools · 2020–21 through 2025–26
 
-**Data sources:** [College Basketball Reference](https://www.sports-reference.com/cbb/) (BPM, box scores), [Barttorvik](https://barttorvik.com) (portal entries), [On3](https://on3.com) (recruiting composites). All scraping uses polite rate limits (2–3s delays, 429 backoff) and targets publicly accessible data for research purposes.
+## Data Sources
+
+| Source | Use |
+|---|---|
+| [College Basketball Reference](https://www.sports-reference.com/cbb/) | BPM, box scores, player pages |
+| [Barttorvik](https://barttorvik.com) | Portal entries, all seasons |
+| [On3](https://on3.com) | Recruiting composites |
+
+All scrapers use 2–3s delays between requests and handle 429 rate-limit responses with exponential backoff.
 
 ---
 
