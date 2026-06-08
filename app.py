@@ -603,7 +603,8 @@ with tabX:
         h1.metric("Transfers Analyzed", f"{int(hero['total_scored'][0]):,}")
         h2.metric("High Value Rate", f"{hero['hv_pct'][0]}%")
         h3.metric("Avg BPM After Transfer", f"{hero['avg_bpm'][0]:+.2f}")
-        h4.metric(f"🐐 Best Ever · {hero['best_player'][0]}", f"+{hero['best_bpm'][0]:.1f} BPM")
+        h4.metric("Best Transfer Ever", f"+{hero['best_bpm'][0]:.1f} BPM")
+        h4.caption(f"🐐 {hero['best_player'][0]}")
 
         st.markdown("---")
 
