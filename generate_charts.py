@@ -184,7 +184,7 @@ def chart_recruit_vs_success():
             CASE WHEN p.recruiting_composite >= 90 THEN 'Elite (90+)'
                  WHEN p.recruiting_composite >= 80 THEN 'High (80–90)'
                  WHEN p.recruiting_composite >= 70 THEN 'Mid (70–80)'
-                 ELSE 'Low (<70)'
+                 ELSE 'Unrated (no composite)'
             END AS bucket,
             CASE WHEN p.recruiting_composite >= 90 THEN 1
                  WHEN p.recruiting_composite >= 80 THEN 2

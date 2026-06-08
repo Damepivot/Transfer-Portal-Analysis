@@ -22,37 +22,37 @@ All scrapers use 2–3s delays between requests and handle 429 rate-limit respon
 
 ### Transfer Success Rate by Tier Movement
 ![Tier heatmap](assets/01_tier_heatmap.png)
-*Every cell shows the success rate and sample size for that origin → destination tier pair. High Major → High Major is the most active route (n=311, 69.1%). High Major → Mid Major is the weakest at 42.1% — the largest downgrade in success rate for any high-volume route.*
+*Every cell shows the success rate and sample size for that origin → destination tier pair. High Major → High Major is the most active route by far (n=510, 70.0%). High Major → Mid Major is the steepest high-volume downgrade — success drops to 37.0% (n=262) once a player moves down two tiers.*
 
 ---
 
 ### High-Major Success Rate by Origin Tier
 ![Origin tier success](assets/02_origin_tier_success.png)
-*At high-major destinations, low-major (74.4%) and mid-major (69.7%) step-ups slightly outperform same-tier high-major laterals (69.1%). High-mid major transfers (67.1%) are the weakest, suggesting over-competition relative to expectation at high-major programs.*
+*At high-major destinations, success rates cluster tightly across all four origin tiers (66.0%–70.0%). Same-tier laterals (High Major → High Major) hold the edge at 70.0% — also the largest pipeline by volume (n=510). Step-ups from Mid Major land lowest at 66.0% (n=209), but the spread across all origins is under 4 points, suggesting origin tier alone isn't a strong differentiator once a player reaches a high-major program.*
 
 ---
 
 ### Top 15 Transfers by Context Score
 ![Top transfers](assets/03_top_transfers.png)
-*Context score = `bpm_after × tier_weight × role_weight`. It rewards performing at a high level in a harder environment with a smaller role. Walker Kessler (North Carolina → Auburn, ctx=20.9), Oscar Tshiebwe (West Virginia → Kentucky, 18.0), and Tari Eason (Cincinnati → LSU, 16.9) lead the dataset — all moved to high-major programs and exceeded expectations.*
+*Context score = `bpm_after × tier_weight × role_weight`. It rewards performing at a high level in a harder environment with a smaller role. Walker Kessler (North Carolina → Auburn, ctx=20.1), Oscar Tshiebwe (West Virginia → Kentucky, 18.0), and Maliq Brown (Syracuse → Duke, 17.1) lead the dataset — all moved to high-major programs and exceeded expectations.*
 
 ---
 
 ### Recruiting Composite vs Transfer Success
 ![Recruit vs success](assets/04_recruit_vs_success.png)
-*Recruiting pedigree is the single strongest predictor of transfer success. Elite recruits (90+ composite) succeed at 83.5% and average +4 BPM after transferring. Low-recruit players succeed at 42.6% and average negative BPM — pedigree doesn't expire.*
+*Recruiting pedigree remains a strong predictor of transfer success, and the cleanest signal sits at the extremes. Elite recruits (90+ composite, n=852) succeed at 66.1% and average +2.67 BPM after transferring; players with no recruiting composite on record at all (n=1,441 — largely international, JUCO, and walk-on transfers, not "low-rated" recruits) succeed at just 28.5% and average −1.27 BPM. The "Mid (70–80)" bar's 63.6% sits on only 11 players — too small a sample to read as a trend rather than noise.*
 
 ---
 
 ### Success Rate by Position & Origin Tier (High-Major Destinations)
 ![Position success](assets/05_position_success.png)
-*The standout: high-mid major Centers transferring to high-major programs succeed at 92.9% — the highest of any position/route combination. Low-major Forwards are also elite at 87.5%. Mid-major Guards are the weakest route at 69.2%.*
+*Guards are the largest pool by far (n=405 from high-major origins alone) and cluster tightly around 64–70% regardless of origin tier — the most statistically stable read in this chart. Forwards post higher, more variable rates (72.8%–83.3%) but on much smaller samples (n=12–81 per cell). Center cells are too thin to draw conclusions from (n=5–24); a figure like the 55.6% for High-Mid-Major-origin Centers rests on just 9 transfers and will keep swinging as more seasons are added.*
 
 ---
 
 ### Verdict Distribution
 ![Verdict distribution](assets/06_verdict_distribution.png)
-*Across all 1,038 scored transfers, the model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from. Coverage spans 2021-22 through 2024-25.*
+*Across all 3,025 scored transfers, the model uses absolute BPM after transfer as the verdict threshold — the bar is the same regardless of where a player came from. Coverage spans 2020-21 through 2024-25.*
 
 ---
 
@@ -273,7 +273,7 @@ Sidebar filters: season, position, destination tier.
 - [x] Context score model live — verdicts use absolute bpm_after, context_score used for ranking only
 - [x] 5 SQL views including materialized peer baseline (`tier_pair_expectations`)
 - [x] Data cleaning: small-sample BPM nulled (< 12 games), duplicate transfers resolved, view Cartesian products fixed
-- [x] **1,038 fully scored transfers** across 4 seasons (2021-22 through 2024-25) — 100% real CBB Reference data
+- [x] **3,025 fully scored transfers** across 5 seasons (2020-21 through 2024-25) — 100% real CBB Reference data
 - [x] JUCO/D2/D3/NAIA origin support via `sub_d1` tier — scores based on D1 destination BPM
 - [x] 6-tab Streamlit dashboard: Overview, Individual Scores, Team Portfolio, Recruit Profiles, Player Fit Finder, Coach Search
 - [x] Coach Search: Strong Match / Match tiers, USG%-based role projection, CBB Reference links
