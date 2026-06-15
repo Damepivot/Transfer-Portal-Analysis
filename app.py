@@ -259,6 +259,12 @@ POS_EXPAND = {
     "F": ["G/F", "F", "F/C"],
     "C": ["F/C", "C"],
 }
+def fmt_season(s: str) -> str:
+    """Convert DB season '2023-24' to display label '2023 Transfer Class'."""
+    if s and "-" in s:
+        return s.split("-")[0] + " Transfer Class"
+    return s
+
 def expand_positions(selected: list) -> list:
     """Given a list like ['G','F'], return all DB position values to match."""
     if not selected:
@@ -345,7 +351,7 @@ nil_era_seasons = [s for s in seasons if s >= "2022-23"]
 st.sidebar.markdown("**Season**")
 era_mode = st.sidebar.radio("Era", ["NIL Era (2022-23+)", "All Seasons"], horizontal=True)
 default_seasons = nil_era_seasons if era_mode == "NIL Era (2022-23+)" else seasons
-selected_seasons = st.sidebar.multiselect("Seasons", seasons, default=default_seasons)
+selected_seasons = st.sidebar.multiselect("Seasons", seasons, default=default_seasons, format_func=fmt_season)
 
 positions = ["All", "G", "G/F", "F", "F/C", "C"]
 selected_pos = st.sidebar.selectbox("Position", positions)
@@ -863,11 +869,12 @@ with tabX:
             ORDER BY season
         """)
         if not nil_trend.empty:
+            nil_trend["season"] = nil_trend["season"].apply(fmt_season)
             import plotly.graph_objects as go
             fig_nil = go.Figure()
-            fig_nil.add_vline(x="2021-22", line_dash="dot", line_color="#FF6B00", opacity=0.7)
+            fig_nil.add_vline(x=fmt_season("2021-22"), line_dash="dot", line_color="#FF6B00", opacity=0.7)
             fig_nil.add_annotation(
-                x="2021-22", y=1, yref="paper",
+                x=fmt_season("2021-22"), y=1, yref="paper",
                 text="NIL begins", showarrow=False,
                 xanchor="left", yanchor="top",
                 font=dict(color="#FF6B00", size=11),
@@ -938,6 +945,7 @@ with tabX:
                 )
 
             with st.expander("Show full top-20 table"):
+                goat_df["season"] = goat_df["season"].apply(fmt_season)
                 st.dataframe(
                     goat_df[[
                         "rank","full_name","position","from_school","to_school",
@@ -1189,6 +1197,7 @@ with tab1:
         try:
             vol_params = pos_filter()[1] + dest_filter()[1]
             vol = query(vol_sql, vol_params)
+            vol["season"] = vol["season"].apply(fmt_season)
             fig = px.bar(vol, x="season", y="transfers", color_discrete_sequence=["#2e75b6"])
             fig.update_layout(margin=dict(t=20, b=20), xaxis_title="", yaxis_title="# Transfers")
             st.plotly_chart(fig, use_container_width=True)
@@ -1364,6 +1373,7 @@ with tab2:
                        else "✅ Solid Backup" if b >= -0.5 else "📋 Project")
             if pd.notna(b) else "—"
         )
+        its["season"] = its["season"].apply(fmt_season)
         show_cols = ["role", "full_name", "position", "season", "from_school", "from_tier_label",
                      "to_school", "to_tier_label", "bpm_before", "bpm_after",
                      "context_score", "transfer_premium", "transfer_verdict"]
@@ -2181,6 +2191,7 @@ with tab5:
                     "bpm_after":        "BPM (new school)",
                     "transfer_verdict": "Verdict",
                 }
+                comp["season"] = comp["season"].apply(fmt_season)
                 show_comp = comp[[c for c in display_cols if c in comp.columns]].rename(columns=display_cols)
 
                 def _color_match_row(row):
@@ -2302,7 +2313,7 @@ with tab6:
             help="What kind of player are you looking for? Based on their BPM at their previous school.",
         )
     with pool_col2:
-        pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season")
+        pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season", format_func=lambda x: x if x == "All" else fmt_season(x))
     with pool_col3:
         pool_pos = st.multiselect(
             "Position(s)", ["G", "F", "C"],
@@ -2383,6 +2394,7 @@ with tab6:
             m3.metric("🌟 Starters+", int(starters_n))
             m4.metric("💪 Key Guys", int(key_guys_n))
 
+            pool_df["season"] = pool_df["season"].apply(fmt_season)
             display_pool = pool_df[[
                 "fit", "projected_role", "full_name", "position", "height_str", "weight_lbs",
                 "season", "from_school", "from_tier_label",
@@ -2459,6 +2471,7 @@ with tab6:
                         u_df["from_tier_label"] = u_df["from_tier"].map(TIER_LABELS)
                         with st.expander(f"📊 {len(u_df)} Additional Portal Entries (No BPM Yet)", expanded=False):
                             st.caption("These transfers are in the portal record but don't have CBB Reference BPM data yet. Name + school movement is confirmed.")
+                            u_df["season"] = u_df["season"].apply(fmt_season)
                             st.dataframe(
                                 u_df[["full_name","position","season","from_school","from_tier_label","to_school","to_tier_label"]].rename(columns={
                                     "full_name":"Player","position":"Pos","season":"Season",
@@ -2503,7 +2516,7 @@ with tab6:
             coach_birth_min = st.number_input("Born After (year)", 1998, 2007, 2000, key="coach_birth_min")
             coach_birth_max = st.number_input("Born Before (year)", 1998, 2008, 2006, key="coach_birth_max")
             coach_season_p1 = st.selectbox(
-                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="coach_season_p1"
+                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="coach_season_p1", format_func=lambda x: x if x == "Any" else fmt_season(x)
             )
 
         coach_show_all = st.checkbox(
@@ -2670,6 +2683,7 @@ with tab6:
                             lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—")
                         results["cbb_ref"] = results["full_name"].apply(
                             lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
+                        results["season"] = results["season"].apply(fmt_season)
                         p1_cols = {
                             "match_quality":"Match","full_name":"Player","cbb_ref":"CBB Ref",
                             "position":"Pos","height_str":"Height","height_cat":"Ht Profile",
@@ -2724,7 +2738,7 @@ with tab6:
                 help="Only show players who achieved at least this outcome after transferring."
             )
             ec_season_p2 = st.selectbox(
-                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="ec_season_p2"
+                "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="ec_season_p2", format_func=lambda x: x if x == "Any" else fmt_season(x)
             )
 
         if st.button("Find the Profile", type="primary", key="coach_search_btn_p2"):
@@ -2875,6 +2889,7 @@ with tab6:
                     ec_results["cbb_ref"] = ec_results["full_name"].apply(
                         lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
 
+                    ec_results["season"] = ec_results["season"].apply(fmt_season)
                     ec_display_cols = {
                         "full_name":"Player","cbb_ref":"CBB Ref",
                         "position":"Pos","height_str":"Height","height_cat":"Ht Profile",
