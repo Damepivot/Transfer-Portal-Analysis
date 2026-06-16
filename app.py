@@ -610,7 +610,7 @@ with tabX:
             SELECT
                 COUNT(*)                                                        AS total_scored,
                 ROUND(100.0 * COUNT(CASE WHEN transfer_verdict IN
-                    ('High Value','Exceeded Expectations') THEN 1 END)
+                    ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)
                     / COUNT(*), 1)                                              AS hv_pct,
                 ROUND(AVG(bpm_after)::numeric, 2)                              AS avg_bpm,
                 MAX(bpm_after)                                                  AS best_bpm,
@@ -622,7 +622,7 @@ with tabX:
         """)
         h1, h2, h3, h4 = st.columns(4)
         h1.metric("Transfers Analyzed", f"{int(hero['total_scored'][0]):,}")
-        h2.metric("Impact Rate", f"{hero['hv_pct'][0]}%")
+        h2.metric("Positive Outcome Rate", f"{hero['hv_pct'][0]}%")
         h3.metric("Avg BPM After Transfer", f"{hero['avg_bpm'][0]:+.2f}")
         h4.metric("Best Transfer Ever", f"+{hero['best_bpm'][0]:.1f} BPM")
         h4.caption(f"🐐 {hero['best_player'][0]}")
@@ -636,7 +636,7 @@ with tabX:
         route_df = query("""
             SELECT from_tier, to_tier, COUNT(*) as n,
                 ROUND(100.0 * COUNT(CASE WHEN transfer_verdict IN
-                    ('High Value','Exceeded Expectations') THEN 1 END) / COUNT(*), 1) AS hv_pct,
+                    ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END) / COUNT(*), 1) AS hv_pct,
                 ROUND(AVG(bpm_after)::numeric,2) AS avg_bpm
             FROM individual_transfer_scores
             WHERE to_tier NOT IN ('sub_d1','international')
@@ -662,15 +662,15 @@ with tabX:
             st.markdown("**🏆 Routes That Work (50%+ High Value)**")
             for _, r in top.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High-Impact · "
+                    f"- **{r['route']}** — {r['hv_pct']:.0f}% Positive · "
                     f"avg +{r['avg_bpm']:.1f} BPM · n={int(r['n'])}"
                 )
         with col_avoids:
             bot = route_df[route_df["hv_pct"] < 20].tail(6)
-            st.markdown("**Routes That Miss (under 20% High-Impact)**")
+            st.markdown("**Routes That Miss (under 20% Positive Outcome)**")
             for _, r in bot.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High-Impact · "
+                    f"- **{r['route']}** — {r['hv_pct']:.0f}% Positive · "
                     f"avg {r['avg_bpm']:+.1f} BPM · n={int(r['n'])}"
                 )
 
@@ -683,7 +683,7 @@ with tabX:
                 "➡️ Lateral":   "#FF8C38",
                 "⬇️ Moving Down": "#444444",
             },
-            labels={"hv_pct": "Impact Rate %", "route": "", "direction": "Move"},
+            labels={"hv_pct": "Positive Outcome %", "route": "", "direction": "Move"},
             text="hv_pct",
         )
         fig_route.update_traces(texttemplate="%{text:.0f}%", textposition="outside")
@@ -704,7 +704,7 @@ with tabX:
                 SELECT from_school, from_tier, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
-                        ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct
+                        ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)/COUNT(*),1) as hv_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                   AND from_tier NOT IN ('sub_d1','international')
@@ -731,7 +731,7 @@ with tabX:
                 SELECT from_school, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
-                        ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct,
+                        ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)/COUNT(*),1) as hv_pct,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit'
                         THEN 1 END)/COUNT(*),1) as fail_pct
                 FROM individual_transfer_scores
@@ -745,7 +745,7 @@ with tabX:
                 for _, r in worst_origin_df.iterrows():
                     st.markdown(
                         f"- **{r['from_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
-                        f"{r['hv_pct']}% High-Impact · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
+                        f"{r['hv_pct']}% Positive · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
         with col_dev:
@@ -755,7 +755,7 @@ with tabX:
                 SELECT to_school, to_tier, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
-                        ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct
+                        ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)/COUNT(*),1) as hv_pct
                 FROM individual_transfer_scores
                 WHERE to_tier NOT IN ('sub_d1','international')
                 GROUP BY to_school, to_tier HAVING COUNT(*) >= 8  -- 8 minimum per destination school
@@ -780,7 +780,7 @@ with tabX:
                 SELECT to_school, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bpm_after)::numeric,2) as median_bpm,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
-                        ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct,
+                        ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)/COUNT(*),1) as hv_pct,
                     ROUND(100.0*COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit'
                         THEN 1 END)/COUNT(*),1) as fail_pct
                 FROM individual_transfer_scores
@@ -793,7 +793,7 @@ with tabX:
                 for _, r in worst_dest_df.iterrows():
                     st.markdown(
                         f"- **{r['to_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
-                        f"{r['hv_pct']}% High-Impact · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
+                        f"{r['hv_pct']}% Positive · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
         st.markdown("---")
@@ -805,7 +805,7 @@ with tabX:
             SELECT position, COUNT(*) as n,
                 ROUND(AVG(bpm_after)::numeric,2) as avg_bpm,
                 ROUND(100.0*COUNT(CASE WHEN transfer_verdict IN
-                    ('High Value','Exceeded Expectations') THEN 1 END)/COUNT(*),1) as hv_pct,
+                    ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)/COUNT(*),1) as hv_pct,
                 ROUND(100.0*COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit' THEN 1 END)/COUNT(*),1) as fail_pct
             FROM individual_transfer_scores
             WHERE position IN ('G','F','C')
@@ -818,7 +818,7 @@ with tabX:
                 icon = {"G": "🏃", "F": "💪", "C": "🏆"}.get(row["position"], "")
                 st.metric(f"{icon} {row['position']} — Avg BPM", f"{row['avg_bpm']:+.2f}")
                 st.caption(
-                    f"{int(row['n'])} transfers · {row['hv_pct']}% High-Impact · "
+                    f"{int(row['n'])} transfers · {row['hv_pct']}% Positive · "
                     f"{row['fail_pct']}% Below Proj."
                 )
 
@@ -838,7 +838,7 @@ with tabX:
                 COUNT(*)                                                          AS n,
                 ROUND(AVG(bpm_after)::numeric, 2)                                AS avg_bpm,
                 ROUND(100.0 * COUNT(CASE WHEN transfer_verdict IN
-                    ('High Value','Exceeded Expectations') THEN 1 END)
+                    ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)
                     / COUNT(*), 1)                                                AS hv_pct,
                 ROUND(100.0 * COUNT(CASE WHEN transfer_verdict = 'Didn''t Fit'
                     THEN 1 END) / COUNT(*), 1)                                   AS fail_pct,
@@ -873,7 +873,7 @@ with tabX:
             SELECT season,
                 COUNT(*) AS n,
                 ROUND(100.0 * COUNT(CASE WHEN transfer_verdict IN
-                    ('High Value','Exceeded Expectations') THEN 1 END)
+                    ('High Value','Exceeded Expectations','Solid Addition') THEN 1 END)
                     / COUNT(*), 1) AS hv_pct,
                 ROUND(AVG(bpm_after)::numeric, 2) AS avg_bpm
             FROM individual_transfer_scores
@@ -897,7 +897,7 @@ with tabX:
             fig_nil.add_trace(go.Scatter(
                 x=nil_trend["season"], y=nil_trend["hv_pct"],
                 mode="lines+markers+text",
-                name="Impact Rate %",
+                name="Positive Outcome %",
                 line=dict(color="#FF6B00", width=2),
                 marker=dict(size=8),
                 text=nil_trend["hv_pct"].apply(lambda v: f"{v:.0f}%"),
@@ -911,7 +911,7 @@ with tabX:
                 marker_color="#FF8C38",
             ))
             fig_nil.update_layout(
-                yaxis=dict(title="Impact Rate %", range=[0, 100]),
+                yaxis=dict(title="Positive Outcome %", range=[0, 100]),
                 yaxis2=dict(title="# Transfers", overlaying="y", side="right"),
                 legend=dict(orientation="h", y=1.1),
                 margin=dict(t=20, b=10),
