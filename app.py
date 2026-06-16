@@ -228,11 +228,11 @@ TIER_COLORS = {
 # Chart colors for verdict labels (bright, for plotly rendering).
 # Table cell backgrounds are intentionally different — see _color_verdict_cell().
 VERDICT_COLORS = {
-    "Exceeded Expectations": "#FF6B00",
-    "High Value":            "#FF8C38",
-    "Solid Addition":        "#FFB347",
-    "Neutral":               "#888888",
-    "Didn't Fit":            "#2D2D2D",
+    "Above Projection":       "#FF6B00",
+    "High-Impact Acquisition":"#FF8C38",
+    "Positive Acquisition":   "#FFB347",
+    "Lateral Move":           "#888888",
+    "Below Projection":       "#2D2D2D",
 }
 
 # ── BPM floors and caps (applied consistently in SQL and Python) ──────────────
@@ -248,7 +248,7 @@ BPM_TOL    = 2.0   # ±2.0 BPM — same production tier; fallback search expands
 BIRTH_TOL  = 2     # ±2 years — keeps comparisons within the same recruiting generation
 
 # ── Route success thresholds for "Works / Mixed / Risky" labels ──────────────
-# Calibrated against the full dataset: >55% High Value = consistently productive,
+# Calibrated against the full dataset: >55% High-Impact = consistently productive,
 # 38–55% = route-dependent, <38% = historically poor outcomes.
 ROUTE_WORKS_PCT  = 55
 ROUTE_VIABLE_PCT = 38
@@ -275,6 +275,21 @@ def expand_positions(selected: list) -> list:
     return list(dict.fromkeys(out))  # dedupe, preserve order
 
 VERDICT_ORDER = ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"]
+VERDICT_DISPLAY_ORDER = ["Above Projection", "High-Impact Acquisition", "Positive Acquisition", "Lateral Move", "Below Projection"]
+
+# Front-office display labels — maps internal DB values to scouting-report language.
+# SQL queries and DB storage keep the original strings; only UI display changes.
+VERDICT_DISPLAY = {
+    "Exceeded Expectations": "Above Projection",
+    "High Value":            "High-Impact Acquisition",
+    "Solid Addition":        "Positive Acquisition",
+    "Neutral":               "Lateral Move",
+    "Didn't Fit":            "Below Projection",
+}
+
+def fmt_verdict(v: str) -> str:
+    """Translate internal verdict to front-office display language."""
+    return VERDICT_DISPLAY.get(v, v) if v else v
 
 # Position-relative physical profile buckets for Coach Search match scoring.
 # "Short/Average/Tall" and "Lean/Average/Heavy" are relative to what's normal at each position,
@@ -497,37 +512,37 @@ with tab0:
         <div style="background:#1A1A1A; border-top:2px solid #FF6B00; border-radius:4px;
                     padding:10px 16px; min-width:130px; text-align:center;">
           <div style="font-size:1.2rem;">🏆</div>
-          <div style="color:#FF6B00; font-weight:700; font-size:0.85rem;">Star</div>
+          <div style="color:#FF6B00; font-weight:700; font-size:0.85rem;">Franchise Asset</div>
           <div style="color:#888; font-size:0.75rem; margin-top:2px;">BPM ≥ 6.0</div>
-          <div style="color:#555; font-size:0.72rem; margin-top:2px;">All-conference level</div>
+          <div style="color:#555; font-size:0.72rem; margin-top:2px;">All-conference caliber</div>
         </div>
         <div style="background:#1A1A1A; border-top:2px solid #FF8C38; border-radius:4px;
                     padding:10px 16px; min-width:130px; text-align:center;">
           <div style="font-size:1.2rem;">🌟</div>
-          <div style="color:#FF8C38; font-weight:700; font-size:0.85rem;">Starter</div>
+          <div style="color:#FF8C38; font-weight:700; font-size:0.85rem;">Primary Contributor</div>
           <div style="color:#888; font-size:0.75rem; margin-top:2px;">BPM 3.0 – 5.9</div>
-          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Can start anywhere</div>
+          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Starting-caliber at any level</div>
         </div>
         <div style="background:#1A1A1A; border-top:2px solid #FFB347; border-radius:4px;
                     padding:10px 16px; min-width:130px; text-align:center;">
           <div style="font-size:1.2rem;">💪</div>
-          <div style="color:#FFB347; font-weight:700; font-size:0.85rem;">Key Guy</div>
+          <div style="color:#FFB347; font-weight:700; font-size:0.85rem;">Rotation Contributor</div>
           <div style="color:#888; font-size:0.75rem; margin-top:2px;">BPM 1.0 – 2.9</div>
-          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Solid rotation piece</div>
+          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Reliable rotation piece</div>
         </div>
         <div style="background:#1A1A1A; border-top:2px solid #888; border-radius:4px;
                     padding:10px 16px; min-width:130px; text-align:center;">
           <div style="font-size:1.2rem;">✅</div>
-          <div style="color:#888; font-weight:700; font-size:0.85rem;">Solid Backup</div>
+          <div style="color:#888; font-weight:700; font-size:0.85rem;">Depth Piece</div>
           <div style="color:#888; font-size:0.75rem; margin-top:2px;">BPM -0.5 – 0.9</div>
           <div style="color:#555; font-size:0.72rem; margin-top:2px;">Quality depth</div>
         </div>
         <div style="background:#1A1A1A; border-top:2px solid #444; border-radius:4px;
                     padding:10px 16px; min-width:130px; text-align:center;">
           <div style="font-size:1.2rem;">📋</div>
-          <div style="color:#666; font-weight:700; font-size:0.85rem;">Project</div>
+          <div style="color:#666; font-weight:700; font-size:0.85rem;">Developmental</div>
           <div style="color:#888; font-size:0.75rem; margin-top:2px;">BPM &lt; -0.5</div>
-          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Raw upside player</div>
+          <div style="color:#555; font-size:0.72rem; margin-top:2px;">Projection player</div>
         </div>
       </div>
 
@@ -607,7 +622,7 @@ with tabX:
         """)
         h1, h2, h3, h4 = st.columns(4)
         h1.metric("Transfers Analyzed", f"{int(hero['total_scored'][0]):,}")
-        h2.metric("High Value Rate", f"{hero['hv_pct'][0]}%")
+        h2.metric("Impact Rate", f"{hero['hv_pct'][0]}%")
         h3.metric("Avg BPM After Transfer", f"{hero['avg_bpm'][0]:+.2f}")
         h4.metric("Best Transfer Ever", f"+{hero['best_bpm'][0]:.1f} BPM")
         h4.caption(f"🐐 {hero['best_player'][0]}")
@@ -647,15 +662,15 @@ with tabX:
             st.markdown("**🏆 Routes That Work (50%+ High Value)**")
             for _, r in top.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High Value · "
+                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High-Impact · "
                     f"avg +{r['avg_bpm']:.1f} BPM · n={int(r['n'])}"
                 )
         with col_avoids:
             bot = route_df[route_df["hv_pct"] < 20].tail(6)
-            st.markdown("**❌ Routes That Don't (under 20% High Value)**")
+            st.markdown("**Routes That Miss (under 20% High-Impact)**")
             for _, r in bot.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High Value · "
+                    f"- **{r['route']}** — {r['hv_pct']:.0f}% High-Impact · "
                     f"avg {r['avg_bpm']:+.1f} BPM · n={int(r['n'])}"
                 )
 
@@ -668,7 +683,7 @@ with tabX:
                 "➡️ Lateral":   "#FF8C38",
                 "⬇️ Moving Down": "#444444",
             },
-            labels={"hv_pct": "High Value %", "route": "", "direction": "Move"},
+            labels={"hv_pct": "Impact Rate %", "route": "", "direction": "Move"},
             text="hv_pct",
         )
         fig_route.update_traces(texttemplate="%{text:.0f}%", textposition="outside")
@@ -730,7 +745,7 @@ with tabX:
                 for _, r in worst_origin_df.iterrows():
                     st.markdown(
                         f"- **{r['from_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
-                        f"{r['hv_pct']}% High Value · {r['fail_pct']}% Didn't Fit · n={int(r['n'])}"
+                        f"{r['hv_pct']}% High-Impact · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
         with col_dev:
@@ -778,7 +793,7 @@ with tabX:
                 for _, r in worst_dest_df.iterrows():
                     st.markdown(
                         f"- **{r['to_school']}** — {float(r['median_bpm']):+.1f} median BPM · "
-                        f"{r['hv_pct']}% High Value · {r['fail_pct']}% Didn't Fit · n={int(r['n'])}"
+                        f"{r['hv_pct']}% High-Impact · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
         st.markdown("---")
@@ -803,8 +818,8 @@ with tabX:
                 icon = {"G": "🏃", "F": "💪", "C": "🏆"}.get(row["position"], "")
                 st.metric(f"{icon} {row['position']} — Avg BPM", f"{row['avg_bpm']:+.2f}")
                 st.caption(
-                    f"{int(row['n'])} transfers · {row['hv_pct']}% High Value · "
-                    f"{row['fail_pct']}% Didn't Fit"
+                    f"{int(row['n'])} transfers · {row['hv_pct']}% High-Impact · "
+                    f"{row['fail_pct']}% Below Proj."
                 )
 
         st.markdown("---")
@@ -845,8 +860,8 @@ with tabX:
                     f"<b style='font-size:1.1rem'>{row['era']}</b><br>"
                     f"<span style='font-size:2rem;font-weight:700'>{row['avg_bpm']:+.2f}</span>"
                     f"<span style='color:#aaa;font-size:.85rem'> avg BPM after</span><br>"
-                    f"<span style='color:{color}'>{row['hv_pct']}% High Value</span> · "
-                    f"<span style='color:#888'>{row['fail_pct']}% Didn't Fit</span><br>"
+                    f"<span style='color:{color}'>{row['hv_pct']}% High-Impact</span> · "
+                    f"<span style='color:#888'>{row['fail_pct']}% Below Proj.</span><br>"
                     f"<span style='color:#aaa;font-size:.85rem'>{int(row['n']):,} transfers · "
                     f"avg swing ±{row['avg_swing']:.1f} BPM</span>"
                     f"</div>",
@@ -882,7 +897,7 @@ with tabX:
             fig_nil.add_trace(go.Scatter(
                 x=nil_trend["season"], y=nil_trend["hv_pct"],
                 mode="lines+markers+text",
-                name="High Value %",
+                name="Impact Rate %",
                 line=dict(color="#FF6B00", width=2),
                 marker=dict(size=8),
                 text=nil_trend["hv_pct"].apply(lambda v: f"{v:.0f}%"),
@@ -896,7 +911,7 @@ with tabX:
                 marker_color="#FF8C38",
             ))
             fig_nil.update_layout(
-                yaxis=dict(title="High Value %", range=[0, 100]),
+                yaxis=dict(title="Impact Rate %", range=[0, 100]),
                 yaxis2=dict(title="# Transfers", overlaying="y", side="right"),
                 legend=dict(orientation="h", y=1.1),
                 margin=dict(t=20, b=10),
@@ -946,6 +961,8 @@ with tabX:
 
             with st.expander("Show full top-20 table"):
                 goat_df["season"] = goat_df["season"].apply(fmt_season)
+                if "transfer_verdict" in goat_df.columns:
+                    goat_df["transfer_verdict"] = goat_df["transfer_verdict"].apply(fmt_verdict)
                 st.dataframe(
                     goat_df[[
                         "rank","full_name","position","from_school","to_school",
@@ -1220,7 +1237,8 @@ with tab2:
         )
     with search_col2:
         tab2_verdict = st.multiselect(
-            "Verdict", VERDICT_ORDER, default=[], key="tab2_verdict",
+            "Evaluation", VERDICT_ORDER, default=[], key="tab2_verdict",
+            format_func=fmt_verdict,
             placeholder="All verdicts",
         )
     with search_col3:
@@ -1291,10 +1309,10 @@ with tab2:
         # Summary strip
         c1, c2, c3, c4, c5 = st.columns(5)
         vc = its["transfer_verdict"].value_counts()
-        c1.metric("High Value",     vc.get("High Value", 0))
-        c2.metric("Solid Addition", vc.get("Solid Addition", 0))
-        c3.metric("Neutral",        vc.get("Neutral", 0))
-        c4.metric("Didn't Fit",     vc.get("Didn't Fit", 0))
+        c1.metric("High-Impact",        vc.get("High-Impact Acquisition", 0) + vc.get("Above Projection", 0))
+        c2.metric("Positive Acq.",      vc.get("Positive Acquisition", 0))
+        c3.metric("Lateral Move",       vc.get("Lateral Move", 0))
+        c4.metric("Below Projection",   vc.get("Below Projection", 0))
         scored = its["transfer_premium"].notna().sum()
         c5.metric("With Peer Baseline", f"{scored:,}")
 
@@ -1345,7 +1363,7 @@ with tab2:
                 y="count",
                 color="transfer_verdict",
                 color_discrete_map=VERDICT_COLORS,
-                category_orders={"transfer_verdict": VERDICT_ORDER},
+                category_orders={"transfer_verdict": VERDICT_DISPLAY_ORDER},
                 barmode="stack",
                 labels={"to_tier_label": "Destination Tier", "count": "Players",
                         "transfer_verdict": "Verdict"},
@@ -1365,7 +1383,7 @@ with tab2:
 | **BPM Δ** | How much they improved or declined. |
 | **Context Score** | BPM × Tier Difficulty × Role Difficulty. Rewards impact in harder environments. Our internal rating. |
 | **Premium** | How much they beat the expected BPM for their type of transfer. Positive = exceeded expectations. |
-| **Verdict** | 🌟 Exceeded · ✅ High Value · 👍 Solid Addition · ➖ Neutral · ❌ Didn't Fit |
+| **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Lateral Move · ❌ Below Projection |
             """)
 
         its["role"] = its["bpm_after"].apply(
@@ -1374,6 +1392,8 @@ with tab2:
             if pd.notna(b) else "—"
         )
         its["season"] = its["season"].apply(fmt_season)
+        if "transfer_verdict" in its.columns:
+            its["transfer_verdict"] = its["transfer_verdict"].apply(fmt_verdict)
         show_cols = ["role", "full_name", "position", "season", "from_school", "from_tier_label",
                      "to_school", "to_tier_label", "bpm_before", "bpm_after",
                      "context_score", "transfer_premium", "transfer_verdict"]
@@ -1704,10 +1724,10 @@ with tab4:
                 "success_avg_ts":       "Avg TS% (after)",
                 "avg_context_score":    "Avg Context Score",
                 "avg_transfer_premium": "Avg Transfer Premium",
-                "high_value_count":     "High Value",
+                "high_value_count":     "High-Impact Acq.",
                 "solid_addition_count": "Solid Addition",
                 "neutral_count":        "Neutral",
-                "didnt_fit_count":      "Didn't Fit",
+                "didnt_fit_count":      "Below Projection",
             }
             st.dataframe(
                 filtered[[c for c in expect_cols if c in filtered.columns]]
@@ -2192,6 +2212,8 @@ with tab5:
                     "transfer_verdict": "Verdict",
                 }
                 comp["season"] = comp["season"].apply(fmt_season)
+                if "transfer_verdict" in comp.columns:
+                    comp["transfer_verdict"] = comp["transfer_verdict"].apply(fmt_verdict)
                 show_comp = comp[[c for c in display_cols if c in comp.columns]].rename(columns=display_cols)
 
                 def _color_match_row(row):
@@ -2395,6 +2417,8 @@ with tab6:
             m4.metric("💪 Key Guys", int(key_guys_n))
 
             pool_df["season"] = pool_df["season"].apply(fmt_season)
+            if "transfer_verdict" in pool_df.columns:
+                pool_df["transfer_verdict"] = pool_df["transfer_verdict"].apply(fmt_verdict)
             display_pool = pool_df[[
                 "fit", "projected_role", "full_name", "position", "height_str", "weight_lbs",
                 "season", "from_school", "from_tier_label",
@@ -2635,7 +2659,7 @@ with tab6:
                             st.success(
                                 f"**{strong_n} Strong · {solid_n} Solid** · "
                                 f"{len(same_tier)} went to {my_tier_label}{conf_str} — "
-                                f"{sp:.0f}% High Value or Solid Addition"
+                                f"{sp:.0f}% High-Impact or Positive Acquisition"
                             )
                         else:
                             st.info(
@@ -2651,7 +2675,7 @@ with tab6:
                                 vc.columns = ["Verdict", "Count"]
                                 fv = px.bar(vc, x="Verdict", y="Count", color="Verdict",
                                             color_discrete_map=VERDICT_COLORS,
-                                            category_orders={"Verdict": VERDICT_ORDER})
+                                            category_orders={"Verdict": VERDICT_DISPLAY_ORDER})
                                 fv.update_layout(margin=dict(t=10, b=10), showlegend=False)
                                 st.plotly_chart(fv, use_container_width=True)
                             with col_bx:
@@ -2684,6 +2708,8 @@ with tab6:
                         results["cbb_ref"] = results["full_name"].apply(
                             lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
                         results["season"] = results["season"].apply(fmt_season)
+                        if "transfer_verdict" in results.columns:
+                            results["transfer_verdict"] = results["transfer_verdict"].apply(fmt_verdict)
                         p1_cols = {
                             "match_quality":"Match","full_name":"Player","cbb_ref":"CBB Ref",
                             "position":"Pos","height_str":"Height","height_cat":"Ht Profile",
@@ -2731,11 +2757,12 @@ with tab6:
             ec_usg_filter = st.checkbox("Apply usage filter", value=False, key="ec_usg_filter")
         with ec2:
             ec_verdict = st.multiselect(
-                "Verdict Filter",
+                "Evaluation Filter",
                 VERDICT_ORDER,
                 default=["High Value", "Solid Addition", "Exceeded Expectations"],
                 key="ec_verdict",
-                help="Only show players who achieved at least this outcome after transferring."
+                format_func=fmt_verdict,
+                help="Only show players who met or exceeded this evaluation threshold after transferring."
             )
             ec_season_p2 = st.selectbox(
                 "Season (optional)", ["Any"] + sorted(seasons, reverse=True), key="ec_season_p2", format_func=lambda x: x if x == "Any" else fmt_season(x)
@@ -2890,6 +2917,8 @@ with tab6:
                         lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
 
                     ec_results["season"] = ec_results["season"].apply(fmt_season)
+                    if "transfer_verdict" in ec_results.columns:
+                        ec_results["transfer_verdict"] = ec_results["transfer_verdict"].apply(fmt_verdict)
                     ec_display_cols = {
                         "full_name":"Player","cbb_ref":"CBB Ref",
                         "position":"Pos","height_str":"Height","height_cat":"Ht Profile",

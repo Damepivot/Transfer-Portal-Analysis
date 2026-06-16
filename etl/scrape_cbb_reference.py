@@ -469,7 +469,7 @@ def scrape_school_season(school: str, season: str) -> pd.DataFrame | str | None:
                     df = df[df["Player"].notna()].copy()
                     df["school"]  = school
                     df["season"]  = season
-                    keep = ["Player", "Pos", "G", "TS%", "USG%", "BPM", "OBPM", "DBPM", "school", "season"]
+                    keep = ["Player", "Pos", "G", "TS%", "USG%", "BPM", "OBPM", "DBPM", "WS", "WS/40", "school", "season"]
                     for col in ("Prev. School", "Prior School"):
                         if col in df.columns:
                             df["prev_school"] = df[col].astype(str).replace("nan", "")

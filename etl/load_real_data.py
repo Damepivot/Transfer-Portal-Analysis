@@ -1065,7 +1065,9 @@ def main():
             dbpm    = parse_stat(row.get("DBPM"))
             ts_pct  = parse_stat(row.get("TS%"))
             usg_pct = parse_stat(row.get("USG%"))
-            games   = int(row["G"]) if pd.notna(row.get("G")) else None
+            ws_per_40 = parse_stat(row.get("WS/40"))
+            ws        = parse_stat(row.get("WS"))
+            games     = int(row["G"]) if pd.notna(row.get("G")) else None
 
             if bpm is None or abs(bpm) > 15 or (games is not None and games < 12):
                 skipped_real += 1
@@ -1074,20 +1076,26 @@ def main():
                 obpm = None
             if dbpm is not None and abs(dbpm) > 15:
                 dbpm = None
+            if ws_per_40 is not None and (ws_per_40 < -0.1 or ws_per_40 > 0.5):
+                ws_per_40 = None
+            if ws is not None and (ws < -1 or ws > 15):
+                ws = None  # clip extreme outliers
 
             tid = get_or_create_team(school, season)
 
             cur.execute(
-                """INSERT INTO player_seasons (player_id, team_id, season, bpm, obpm, dbpm, ts_pct, usg_pct, games)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """INSERT INTO player_seasons (player_id, team_id, season, bpm, obpm, dbpm, ts_pct, usg_pct, games, ws_per_40, ws)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                    ON CONFLICT (player_id, team_id, season) DO UPDATE SET
-                       bpm     = EXCLUDED.bpm,
-                       obpm    = COALESCE(EXCLUDED.obpm,    player_seasons.obpm),
-                       dbpm    = COALESCE(EXCLUDED.dbpm,    player_seasons.dbpm),
-                       ts_pct  = COALESCE(EXCLUDED.ts_pct,  player_seasons.ts_pct),
-                       usg_pct = COALESCE(EXCLUDED.usg_pct, player_seasons.usg_pct),
-                       games   = COALESCE(EXCLUDED.games,   player_seasons.games)""",
-                (pid, tid, season, bpm, obpm, dbpm, ts_pct, usg_pct, games)
+                       bpm       = EXCLUDED.bpm,
+                       obpm      = COALESCE(EXCLUDED.obpm,      player_seasons.obpm),
+                       dbpm      = COALESCE(EXCLUDED.dbpm,      player_seasons.dbpm),
+                       ts_pct    = COALESCE(EXCLUDED.ts_pct,    player_seasons.ts_pct),
+                       usg_pct   = COALESCE(EXCLUDED.usg_pct,   player_seasons.usg_pct),
+                       games     = COALESCE(EXCLUDED.games,     player_seasons.games),
+                       ws_per_40 = COALESCE(EXCLUDED.ws_per_40, player_seasons.ws_per_40),
+                       ws        = COALESCE(EXCLUDED.ws,        player_seasons.ws)""",
+                (pid, tid, season, bpm, obpm, dbpm, ts_pct, usg_pct, games, ws_per_40, ws)
             )
             upserted += cur.rowcount
 
