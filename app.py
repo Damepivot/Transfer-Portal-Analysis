@@ -1272,6 +1272,7 @@ with tab2:
             full_name, position, from_school, from_tier,
             to_school, to_tier, season,
             bpm_before, bpm_after, bpm_change,
+            skill_index_before, skill_index_after, skill_index_change,
             usage_before, usage_after, usg_change,
             projected_bpm, transfer_premium,
             context_score, efficiency_after,
@@ -1400,6 +1401,7 @@ with tab2:
 | **BPM Before** | How much above/below average this player was at their *old* school. What a scout would see in the portal. |
 | **BPM After** | What they actually delivered after transferring. The result. |
 | **BPM Δ** | How much they improved or declined. |
+| **Skill Index Before/After** | The blended metric (50% BPM, 25% usage, 25% true-shooting%) that **actually drives the Verdict** below — not raw BPM. A player can post modest BPM but still get credit for an expanded role at solid efficiency. |
 | **Context Score** | BPM × Tier Difficulty × Role Difficulty. Rewards impact in harder environments. Our internal rating. |
 | **Premium** | How much they beat the expected BPM for their type of transfer. Positive = exceeded expectations. |
 | **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Lateral Move · ❌ Below Projection |
@@ -1408,22 +1410,25 @@ with tab2:
         its["season"] = its["season"].apply(fmt_season)
         show_cols = ["role", "full_name", "position", "season", "from_school", "from_tier_label",
                      "to_school", "to_tier_label", "bpm_before", "bpm_after",
+                     "skill_index_before", "skill_index_after",
                      "context_score", "transfer_premium", "transfer_verdict"]
         st.dataframe(
             its[show_cols].rename(columns={
-                "role":             "D1 Role",
-                "full_name":        "Player",
-                "position":         "Pos",
-                "season":           "Season",
-                "from_school":      "From",
-                "from_tier_label":  "From Tier",
-                "to_school":        "To",
-                "to_tier_label":    "To Tier",
-                "bpm_before":       "BPM Before",
-                "bpm_after":        "BPM After",
-                "context_score":    "Context Score",
-                "transfer_premium": "Premium",
-                "transfer_verdict": "Verdict",
+                "role":               "D1 Role",
+                "full_name":          "Player",
+                "position":           "Pos",
+                "season":             "Season",
+                "from_school":        "From",
+                "from_tier_label":    "From Tier",
+                "to_school":          "To",
+                "to_tier_label":      "To Tier",
+                "bpm_before":         "BPM Before",
+                "bpm_after":          "BPM After",
+                "skill_index_before": "Skill Index Before",
+                "skill_index_after":  "Skill Index After",
+                "context_score":      "Context Score",
+                "transfer_premium":   "Premium",
+                "transfer_verdict":   "Verdict",
             }),
             use_container_width=True,
             hide_index=True,
