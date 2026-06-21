@@ -445,8 +445,9 @@ with tab0:
         Pivot Hoops is a data platform built for <strong style="color:#FF6B00;">coaches</strong> and
         <strong style="color:#FF6B00;">players</strong> navigating the transfer portal.
         We track every D1 portal movement — over <strong>9,000 transfers</strong> across
-        <strong>350 schools</strong> — and score each one using real Box Plus/Minus data from
-        College Basketball Reference. No projections. No estimates. Real stats only.
+        <strong>350 schools</strong> — and score each one using real Box Plus/Minus, usage rate,
+        and shooting efficiency data from College Basketball Reference. No projections. No
+        estimates. Real stats only.
       </p>
 
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:32px;">
@@ -478,13 +479,22 @@ with tab0:
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                   text-transform:uppercase; margin-bottom:12px;">Understanding the Metrics</div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:28px;">
+      <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; margin-bottom:28px;">
         <div style="background:#1A1A1A; border-radius:4px; padding:14px 16px;">
           <div style="color:#FFFFFF; font-weight:700; font-size:0.9rem; margin-bottom:6px;">BPM</div>
           <div style="color:#888; font-size:0.82rem; line-height:1.5;">
             Box Plus/Minus — points above average your team scores vs allows per 100 possessions
             with you on the floor. The closest thing to a single "how good is this player" number
             in college basketball.
+          </div>
+        </div>
+        <div style="background:#1A1A1A; border-radius:4px; padding:14px 16px;">
+          <div style="color:#FFFFFF; font-weight:700; font-size:0.9rem; margin-bottom:6px;">Skill Index</div>
+          <div style="color:#888; font-size:0.82rem; line-height:1.5;">
+            What drives every verdict. A blend of BPM (50%), usage rate (25%), and true-shooting%
+            (25%), so a reduced-role player who's still efficient doesn't grade out the same as one
+            who just wasn't productive. Computed both before and after the transfer on the same
+            scale, so "did this move work" is a direct comparison, not just a raw BPM number.
           </div>
         </div>
         <div style="background:#1A1A1A; border-radius:4px; padding:14px 16px;">
@@ -993,9 +1003,12 @@ with tabL:
         <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                     text-transform:uppercase; margin-bottom:8px;">What This Is</div>
         <p style="color:#CCCCCC; font-size:1.0rem; line-height:1.7; max-width:720px; margin:0;">
-          PivotHoops uses Box Plus/Minus (BPM) from College Basketball Reference to score every transfer.
-          BPM is the best publicly available single-number impact metric for college basketball — but it has real limits.
-          Read this before drawing hard conclusions from any number on this dashboard.
+          PivotHoops scores every transfer with <b>skill index</b> — a blend of Box Plus/Minus (50%),
+          usage rate (25%), and true-shooting% (25%) from College Basketball Reference. BPM alone is
+          the best publicly available single-number impact metric, but using it by itself rewards
+          high-usage volume scorers over efficient role players — skill index corrects for that.
+          It still inherits BPM's real limits. Read this before drawing hard conclusions from any
+          number on this dashboard.
         </p>
       </div>
 
@@ -1083,10 +1096,11 @@ with tabL:
             Verdict Thresholds Are Flat
           </div>
           <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            High Value requires BPM above 2.0 regardless of conference.
-            That cutoff is calibrated on the full dataset — it slightly undervalues success
-            in lower-resource environments where a +2.0 BPM player is genuinely harder to produce.
-            Use verdicts as a starting point, not a final answer.
+            High Value requires a skill index more than 1 standard deviation above the population
+            average, regardless of conference. The bar recalculates automatically against the full
+            dataset as more transfers get scored — but it's still one universal bar, not adjusted
+            per tier, so it slightly undervalues success in lower-resource environments where that
+            bar is genuinely harder to clear. Use verdicts as a starting point, not a final answer.
           </p>
         </div>
 

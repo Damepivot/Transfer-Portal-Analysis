@@ -138,12 +138,14 @@ HAVING COUNT(*) >= 5;
 --   bpm_change = bpm_after − bpm_before
 --     → Raw delta. NULL for sub_d1 (no prior D1 stats).
 --
--- Verdict thresholds (based on absolute bpm_after):
---   Exceeded Expectations — bpm_after > 2.0 AND transfer_premium ≥ 2.5 AND context_score ≥ 10
---   High Value            — bpm_after > 2.0
---   Solid Addition        — bpm_after > 0.5
---   Neutral               — bpm_after > -0.5
---   Didn't Fit            — bpm_after ≤ -0.5
+-- Verdict thresholds (based on skill_index_after — a 50/25/25 blend of
+-- BPM/usage/TS%, z-scored and re-centered on its own actual population
+-- mean/SD via idx_stats, see Step 5 below):
+--   Exceeded Expectations — index > +1.00 SD AND transfer_premium ≥ 2.5 AND context_score ≥ 10
+--   High Value            — index > +1.00 SD
+--   Solid Addition        — index > +0.25 SD
+--   Neutral               — index > -0.50 SD
+--   Didn't Fit            — index ≤ -0.50 SD
 --
 -- BPM (Box Plus/Minus) is sourced exclusively from CBB Reference.
 -- Small samples are excluded: players with < 12 games are nulled
@@ -151,9 +153,23 @@ HAVING COUNT(*) >= 5;
 -- ============================================================
 CREATE OR REPLACE VIEW individual_transfer_scores AS
 
--- Step 1: Bucket each player into an elite/high/mid/low recruiting tier.
+-- Step 1: Population stats for skill_index z-scoring.
+-- skill_index blends BPM/usage/efficiency onto one comparable scale so a
+-- player's role (usage) and shot quality (TS%) count toward "success," not
+-- just raw scoring impact. Recomputed live off player_seasons each query —
+-- no manual recalibration needed as more seasons get scraped in.
+WITH pop_stats AS (
+    SELECT
+        AVG(bpm)::numeric     AS mean_bpm,  STDDEV(bpm)::numeric     AS sd_bpm,
+        AVG(usg_pct)::numeric AS mean_usg,  STDDEV(usg_pct)::numeric AS sd_usg,
+        AVG(ts_pct)::numeric  AS mean_ts,   STDDEV(ts_pct)::numeric  AS sd_ts
+    FROM player_seasons
+    WHERE bpm IS NOT NULL
+),
+
+-- Step 2: Bucket each player into an elite/high/mid/low recruiting tier.
 -- This is used both to segment the peer baseline and to label the player.
-WITH recruit_buckets AS (
+recruit_buckets AS (
     SELECT
         player_id,
         CASE
@@ -165,7 +181,7 @@ WITH recruit_buckets AS (
     FROM players
 ),
 
--- Step 2: Assemble all raw fields before computing derived metrics.
+-- Step 3: Assemble all raw fields before computing derived metrics.
 -- This CTE does all the joining; the outer SELECT computes the scores.
 base AS (
     SELECT
@@ -186,6 +202,7 @@ base AS (
         -- Pre-transfer stats (NULL for JUCO/D2/D3 origins — no CBB Reference data)
         ps_before.bpm     AS bpm_before,
         ps_before.usg_pct AS usage_before,
+        ps_before.ts_pct  AS efficiency_before,
         ps_before.games   AS games_before,
         ps_before.mpg     AS mpg_before,
 
@@ -259,9 +276,28 @@ base AS (
             WHEN (ps_after.usg_pct - ps_before.usg_pct) >  5 THEN 0.85
             WHEN (ps_after.usg_pct - ps_before.usg_pct) >  2 THEN 0.95
             ELSE 1.0
-        END AS role_weight
+        END AS role_weight,
+
+        -- skill_index: 50% BPM / 25% usage / 25% true-shooting, each z-scored
+        -- against the full player_seasons population so the three terms sit
+        -- on one comparable scale. BPM-before uses bpm_before_adj (already
+        -- competition-adjusted) so before/after are scored the same way.
+        -- A single missing usage/TS term defaults to 0 (average) rather than
+        -- nulling out the whole index — matches role_weight's "no data = neutral"
+        -- convention above.
+        CASE WHEN ps_before.bpm IS NULL THEN NULL ELSE
+            0.50 * ((ROUND((ps_before.bpm + COALESCE(ts_from.adj_efficiency, 0) * 0.05)::NUMERIC, 2) - ps.mean_bpm) / ps.sd_bpm)
+            + 0.25 * COALESCE((ps_before.usg_pct - ps.mean_usg) / ps.sd_usg, 0)
+            + 0.25 * COALESCE((ps_before.ts_pct  - ps.mean_ts)  / ps.sd_ts,  0)
+        END AS skill_index_before,
+
+        0.50 * ((ps_after.bpm - ps.mean_bpm) / ps.sd_bpm)
+        + 0.25 * COALESCE((ps_after.usg_pct - ps.mean_usg) / ps.sd_usg, 0)
+        + 0.25 * COALESCE((ps_after.ts_pct  - ps.mean_ts)  / ps.sd_ts,  0)
+            AS skill_index_after
 
     FROM transfers tr
+    CROSS JOIN pop_stats ps
     JOIN players p           ON tr.player_id   = p.player_id
     JOIN recruit_buckets rb  ON p.player_id    = rb.player_id
     -- Resolve the from/to school names so sub-selects below can reference them
@@ -319,10 +355,15 @@ base AS (
 
     -- Require real BPM at destination — this is the minimum bar for a scored transfer
     WHERE ps_after.bpm IS NOT NULL
-)
+),
 
--- Step 3: Compute all derived metrics from the assembled base data
-SELECT
+-- Step 4: Compute all derived metrics from the assembled base data.
+-- skill_index_after is a blend of three z-scores (BPM/usage/TS%); because
+-- the inputs are correlated, the blend's own spread isn't SD=1 like a single
+-- z-score would be. idx_stats below measures the blend's *actual* mean/SD so
+-- verdict thresholds are calibrated to the real distribution, not assumed.
+scored AS (
+    SELECT
     transfer_id,
     player_id,
     full_name,
@@ -340,6 +381,14 @@ SELECT
     bpm_before_adj,
     origin_adj_efficiency,
     bpm_after,
+
+    ROUND(skill_index_before, 2) AS skill_index_before,
+    ROUND(skill_index_after,  2) AS skill_index_after,
+
+    -- Direct "success before vs. success after" comparison on one scale —
+    -- the blended counterpart to bpm_change below.
+    CASE WHEN skill_index_before IS NOT NULL
+         THEN ROUND(skill_index_after - skill_index_before, 2) END AS skill_index_change,
 
     -- BPM improvement, adjusted for origin competition level.
     -- Uses bpm_before_adj (not raw bpm_before) so high-major players get credit
@@ -375,24 +424,40 @@ SELECT
 
     -- context_score: the primary ranking metric
     -- Multiplies BPM by tier difficulty and role difficulty adjustments
-    ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) AS context_score,
+    ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) AS context_score
 
-    -- Verdict: based on absolute bpm_after so the bar is consistent across all tiers.
-    -- "Exceeded Expectations" also requires beating the peer baseline — sub_d1 transfers
-    -- (which have no peer baseline) can reach at most "High Value."
+    FROM base
+),
+
+idx_stats AS (
+    SELECT AVG(skill_index_after) AS mean_idx, STDDEV(skill_index_after) AS sd_idx
+    FROM scored
+)
+
+-- Step 5: Apply the verdict using skill_index_after's *actual* distribution
+-- (idx_stats), not raw bpm_after — a player posting below-average BPM in an
+-- expanded role with solid efficiency shouldn't grade out the same as one
+-- who was just unproductive. Thresholds are in standard-deviation units off
+-- the real population mean, so "Solid Addition" means "performed above
+-- average," not an arbitrary BPM cutoff — and it self-recalibrates as more
+-- seasons get scraped in, instead of drifting stale like hardcoded cutoffs.
+-- "Exceeded Expectations" also requires beating the peer baseline — sub_d1
+-- transfers (which have no peer baseline) can reach at most "High Value."
+SELECT
+    s.*,
     CASE
-        WHEN bpm_after >  2.0
-         AND projected_bpm IS NOT NULL
-         AND ROUND(bpm_after - projected_bpm, 2) >= 2.5
-         AND ROUND((bpm_after * tier_weight * role_weight)::NUMERIC, 2) >= 10
-                              THEN 'Exceeded Expectations'
-        WHEN bpm_after >  2.0 THEN 'High Value'
-        WHEN bpm_after >  0.5 THEN 'Solid Addition'
-        WHEN bpm_after > -0.5 THEN 'Neutral'
-        ELSE                       'Didn''t Fit'
+        WHEN (s.skill_index_after - i.mean_idx) / i.sd_idx >  1.00
+         AND s.projected_bpm IS NOT NULL
+         AND ROUND(s.bpm_after - s.projected_bpm, 2) >= 2.5
+         AND s.context_score >= 10
+                                                            THEN 'Exceeded Expectations'
+        WHEN (s.skill_index_after - i.mean_idx) / i.sd_idx >  1.00 THEN 'High Value'
+        WHEN (s.skill_index_after - i.mean_idx) / i.sd_idx >  0.25 THEN 'Solid Addition'
+        WHEN (s.skill_index_after - i.mean_idx) / i.sd_idx > -0.50 THEN 'Neutral'
+        ELSE                                                            'Didn''t Fit'
     END AS transfer_verdict
-
-FROM base;
+FROM scored s
+CROSS JOIN idx_stats i;
 
 
 -- ============================================================
@@ -453,8 +518,9 @@ GROUP BY t.name, c.tier, tr.season, ts.wins, ts.losses, ts.adj_efficiency;
 -- meaningful (it's failures divided into the full denominator, not cherry-picked).
 -- Filtered to route/position combos with ≥ 5 samples to avoid noise.
 --
--- "Success" here = High Value or Solid Addition (bpm_after > 0.5).
--- Exceeded Expectations is a subset of High Value, not a separate outcome.
+-- "Success" here = High Value or Solid Addition (skill_index_after > +0.25 SD,
+-- see individual_transfer_scores). Exceeded Expectations is a subset of
+-- High Value, not a separate outcome.
 -- ============================================================
 CREATE OR REPLACE VIEW recruitment_profiles AS
 SELECT
@@ -537,7 +603,7 @@ SELECT
     SUM(CASE WHEN its.transfer_verdict = 'Neutral'         THEN 1 ELSE 0 END) AS neutral,
     SUM(CASE WHEN its.transfer_verdict = 'Didn''t Fit'     THEN 1 ELSE 0 END) AS didnt_fit,
 
-    -- Combined success rate: High Value + Solid Addition (bpm_after > 0.5)
+    -- Combined success rate: High Value + Solid Addition (skill_index_after > +0.25 SD)
     ROUND(
         100.0 * SUM(CASE WHEN its.transfer_verdict IN ('High Value','Solid Addition') THEN 1 ELSE 0 END)
         / COUNT(*), 1
