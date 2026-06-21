@@ -1320,6 +1320,11 @@ with tab2:
         if tab2_role != "Any Role":
             its = its[its["role"] == tab2_role]
 
+        # Translate to display labels now, before anything reads transfer_verdict —
+        # summary metrics and both charts below key off the display labels
+        # (VERDICT_COLORS / VERDICT_DISPLAY_ORDER), not the raw DB values.
+        its["transfer_verdict"] = its["transfer_verdict"].apply(fmt_verdict)
+
         # Summary strip
         c1, c2, c3, c4, c5 = st.columns(5)
         vc = its["transfer_verdict"].value_counts()
@@ -1400,14 +1405,7 @@ with tab2:
 | **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Lateral Move · ❌ Below Projection |
             """)
 
-        its["role"] = its["bpm_after"].apply(
-            lambda b: ("🏆 Star" if b >= 6.0 else "🌟 Starter" if b >= 3.0 else "💪 Key Guy" if b >= 1.0
-                       else "✅ Solid Backup" if b >= -0.5 else "📋 Project")
-            if pd.notna(b) else "—"
-        )
         its["season"] = its["season"].apply(fmt_season)
-        if "transfer_verdict" in its.columns:
-            its["transfer_verdict"] = its["transfer_verdict"].apply(fmt_verdict)
         show_cols = ["role", "full_name", "position", "season", "from_school", "from_tier_label",
                      "to_school", "to_tier_label", "bpm_before", "bpm_after",
                      "context_score", "transfer_premium", "transfer_verdict"]
