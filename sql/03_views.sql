@@ -13,6 +13,7 @@
 --   3. team_transfer_report                   — per-team transfer class outcomes
 --   4. recruitment_profiles                   — what profile succeeds by route
 --   5. league_transfer_trends                 — season-by-season trends by tier pair
+--   6. current_portal_class                   — in-progress transfers (before-only, no outcome yet)
 --
 -- Everything downstream of individual_transfer_scores is denominated in
 -- skill_index, not raw BPM. BPM still exists as a stored column (it's one
@@ -21,6 +22,7 @@
 -- that's skill_index everywhere a number is shown to a user.
 -- ============================================================
 
+DROP VIEW IF EXISTS current_portal_class       CASCADE;
 DROP VIEW IF EXISTS league_transfer_trends     CASCADE;
 DROP VIEW IF EXISTS recruitment_profiles       CASCADE;
 DROP VIEW IF EXISTS team_transfer_report       CASCADE;
@@ -615,3 +617,99 @@ JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
 JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
 GROUP BY 1, 2, 3, 4
 ORDER BY 1, 2, 3, 4;
+
+
+-- ============================================================
+-- 6. VIEW: current_portal_class
+--
+-- Purpose: surface transfers that have committed but haven't played a game
+-- at their new school yet (the current, in-progress portal class). These are
+-- deliberately excluded from individual_transfer_scores, whose entire scoring
+-- model (verdicts, transfer premium, success rates) requires a real outcome
+-- to grade against — there is no "before vs after" to compare without an
+-- after. This view exists purely to show skill_index_before for transfers
+-- still in flight, with no verdict and no skill_index_after.
+--
+-- A transfer lands here instead of individual_transfer_scores exactly when
+-- no player_seasons row with real BPM exists yet for (player, destination
+-- school, transfer season) — i.e. the season hasn't been played, not that
+-- the data is missing. This is season-agnostic by design: whatever the
+-- newest in-progress class is (2026-27 today, 2027-28 next year, etc.) shows
+-- up here automatically once it's scraped, with no hardcoded season string.
+-- ============================================================
+CREATE OR REPLACE VIEW current_portal_class AS
+WITH recruit_buckets AS (
+    SELECT
+        player_id,
+        CASE
+            WHEN recruiting_composite >= 90 THEN 'elite'
+            WHEN recruiting_composite >= 80 THEN 'high'
+            WHEN recruiting_composite >= 70 THEN 'mid'
+            ELSE                                 'low'
+        END AS recruit_tier
+    FROM players
+)
+SELECT
+    tr.transfer_id,
+    p.full_name,
+    p.position,
+    p.height_in,
+    p.weight_lbs,
+    p.birth_year,
+    p.recruiting_composite,
+    rb.recruit_tier,
+    t_from.name       AS from_school,
+    c_from.tier       AS from_tier,
+    t_to.name         AS to_school,
+    c_to.tier         AS to_tier,
+    tr.season,
+
+    ps_before.bpm     AS bpm_before,
+    ps_before.usg_pct AS usage_before,
+    ps_before.ts_pct  AS efficiency_before,
+    ps_before.games   AS games_before,
+
+    ROUND(
+        CASE WHEN ps_before.bpm IS NULL THEN NULL ELSE
+            0.50 * ((ROUND((ps_before.bpm + COALESCE(ts_from.adj_efficiency, 0) * 0.05)::NUMERIC, 2) - ps.mean_bpm) / ps.sd_bpm)
+            + 0.25 * COALESCE((ps_before.usg_pct - ps.mean_usg) / ps.sd_usg, 0)
+            + 0.25 * COALESCE((ps_before.ts_pct  - ps.mean_ts)  / ps.sd_ts,  0)
+        END,
+    2) AS skill_index_before
+
+FROM transfers tr
+CROSS JOIN skill_index_pop_stats ps
+JOIN players p          ON tr.player_id = p.player_id
+JOIN recruit_buckets rb ON p.player_id  = rb.player_id
+JOIN teams t_from ON tr.from_team_id = t_from.team_id
+JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
+JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
+JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
+
+LEFT JOIN player_seasons ps_before
+    ON tr.player_id = ps_before.player_id
+    AND ps_before.team_id IN (SELECT team_id FROM teams WHERE name = t_from.name)
+    AND ps_before.season = (
+        SELECT MAX(ps2.season)
+        FROM player_seasons ps2
+        JOIN teams t2 ON ps2.team_id = t2.team_id
+        WHERE ps2.player_id = tr.player_id
+          AND t2.name       = t_from.name
+          AND ps2.season    < tr.season
+          AND ps2.bpm IS NOT NULL
+    )
+LEFT JOIN teams t_from_hist
+    ON t_from_hist.name   = t_from.name
+    AND t_from_hist.season = ps_before.season
+LEFT JOIN team_seasons ts_from
+    ON ts_from.team_id = t_from_hist.team_id
+    AND ts_from.season = ps_before.season
+
+WHERE c_to.tier NOT IN ('sub_d1', 'international')
+  AND NOT EXISTS (
+      SELECT 1 FROM player_seasons ps_after
+      WHERE ps_after.player_id = tr.player_id
+        AND ps_after.season    = tr.season
+        AND ps_after.bpm IS NOT NULL
+        AND ps_after.team_id IN (SELECT team_id FROM teams WHERE name = t_to.name)
+  );

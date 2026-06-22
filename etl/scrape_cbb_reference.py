@@ -58,7 +58,7 @@ HEADERS = {
 SEASON_TO_YEAR = {
     "2016-17": 2017, "2017-18": 2018, "2018-19": 2019, "2019-20": 2020,
     "2020-21": 2021, "2021-22": 2022,
-    "2022-23": 2023, "2023-24": 2024, "2024-25": 2025,
+    "2022-23": 2023, "2023-24": 2024, "2024-25": 2025, "2025-26": 2026,
 }
 
 # School name → CBB Reference URL slug
@@ -492,17 +492,18 @@ def main():
         "2022-23": "2021-22",
         "2023-24": "2022-23",
         "2024-25": "2023-24",
+        "2025-26": "2024-25",
     }
     cur.execute("""
         SELECT DISTINCT t.name AS school, tr.season
         FROM transfers tr
         JOIN teams t ON (tr.from_team_id = t.team_id OR tr.to_team_id = t.team_id)
-        WHERE tr.season IN ('2020-21','2021-22','2022-23','2023-24','2024-25')
+        WHERE tr.season IN ('2020-21','2021-22','2022-23','2023-24','2024-25','2025-26')
         UNION
         SELECT DISTINCT t.name AS school, tr.season
         FROM transfers tr
         JOIN teams t ON tr.from_team_id = t.team_id
-        WHERE tr.season IN ('2021-22','2022-23','2023-24','2024-25')
+        WHERE tr.season IN ('2021-22','2022-23','2023-24','2024-25','2025-26')
         ORDER BY 2, 1
     """)
     raw_pairs = cur.fetchall()
@@ -512,7 +513,7 @@ def main():
         SELECT DISTINCT t.name, tr.season
         FROM transfers tr
         JOIN teams t ON tr.from_team_id = t.team_id
-        WHERE tr.season IN ('2021-22','2022-23','2023-24','2024-25')
+        WHERE tr.season IN ('2021-22','2022-23','2023-24','2024-25','2025-26')
     """)
     for school, season in cur.fetchall():
         if season in PRIOR:

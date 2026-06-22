@@ -38,6 +38,13 @@ YEAR_TO_SEASON = {
     2024: "2024-25",
     2025: "2025-26",
     2026: "2025-26",  # current season — players already playing
+    # As of 2026-06, barttorvik's own site redirects year=2026 requests to
+    # year=2027 (the site rolled its "current" trans-page pointer forward once
+    # the 2025-26 season ended). year=2027 is now the live 2026-27 incoming
+    # portal class — verified by spot-checking real, recognizable commits
+    # (e.g. Denzel Aberdeen Kentucky → Florida). These players haven't played
+    # at their new school yet, so they score with skill_index_before only.
+    2027: "2026-27",
 }
 
 # Date ranges for each season (used in the URL filter)
@@ -47,6 +54,7 @@ YEAR_DATE_RANGE = {
     2024: ("20231101", "20240501"),
     2025: ("20241101", "20250501"),
     2026: ("20251101", "20260501"),
+    2027: ("20251101", "20270501"),
 }
 
 

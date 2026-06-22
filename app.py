@@ -232,7 +232,7 @@ VERDICT_COLORS = {
     "Above Projection":       "#FF6B00",
     "High-Impact Acquisition":"#FF8C38",
     "Positive Acquisition":   "#FFB347",
-    "Lateral Move":           "#888888",
+    "Met Projections":           "#888888",
     "Below Projection":       "#2D2D2D",
 }
 
@@ -280,7 +280,7 @@ def expand_positions(selected: list) -> list:
     return list(dict.fromkeys(out))  # dedupe, preserve order
 
 VERDICT_ORDER = ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"]
-VERDICT_DISPLAY_ORDER = ["Above Projection", "High-Impact Acquisition", "Positive Acquisition", "Lateral Move", "Below Projection"]
+VERDICT_DISPLAY_ORDER = ["Above Projection", "High-Impact Acquisition", "Positive Acquisition", "Met Projections", "Below Projection"]
 
 # Front-office display labels — maps internal DB values to scouting-report language.
 # SQL queries and DB storage keep the original strings; only UI display changes.
@@ -288,7 +288,7 @@ VERDICT_DISPLAY = {
     "Exceeded Expectations": "Above Projection",
     "High Value":            "High-Impact Acquisition",
     "Solid Addition":        "Positive Acquisition",
-    "Neutral":               "Lateral Move",
+    "Neutral":               "Met Projections",
     "Didn't Fit":            "Below Projection",
 }
 
@@ -1268,7 +1268,7 @@ with tab2:
         vc = its["transfer_verdict"].value_counts()
         c1.metric("High-Impact",        vc.get("High-Impact Acquisition", 0) + vc.get("Above Projection", 0))
         c2.metric("Positive Acq.",      vc.get("Positive Acquisition", 0))
-        c3.metric("Lateral Move",       vc.get("Lateral Move", 0))
+        c3.metric("Met Projections",       vc.get("Met Projections", 0))
         c4.metric("Below Projection",   vc.get("Below Projection", 0))
         scored = its["transfer_premium"].notna().sum()
         c5.metric("With Peer Baseline", f"{scored:,}")
@@ -1339,7 +1339,7 @@ with tab2:
 | **Skill Index After** | The same blend at their *new* school. What they actually delivered. **This drives the Verdict** below. |
 | **Skill Index Δ** | How much they improved or declined, before vs. after, on the same scale. |
 | **Premium** | How much they beat the expected Skill Index for their type of transfer. Positive = exceeded expectations. |
-| **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Lateral Move · ❌ Below Projection |
+| **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Met Projections · ❌ Below Projection |
             """)
 
         its["season"] = its["season"].apply(fmt_season)
@@ -1365,6 +1365,48 @@ with tab2:
             use_container_width=True,
             hide_index=True,
         )
+
+        # ── Current portal class — committed but not yet played ────────────────
+        # individual_transfer_scores requires a real outcome to score a transfer,
+        # so the in-progress class (committed, no games at the new school yet)
+        # never appears in the table above. current_portal_class surfaces those
+        # with Skill Index Before only — no verdict, no Skill Index After.
+        cpc_sql = """
+            SELECT full_name, position, from_school, from_tier, to_school, to_tier,
+                   season, skill_index_before
+            FROM current_portal_class
+            WHERE season = (SELECT MAX(season) FROM transfers)
+              AND to_tier NOT IN ('sub_d1', 'international')
+        """
+        cpc = query(cpc_sql)
+        if not cpc.empty:
+            if tab2_search:
+                q = tab2_search.strip().lower()
+                cpc = cpc[
+                    cpc["full_name"].str.lower().str.contains(q, na=False)
+                    | cpc["from_school"].str.lower().str.contains(q, na=False)
+                    | cpc["to_school"].str.lower().str.contains(q, na=False)
+                ]
+            cpc_season_label = fmt_season(cpc["season"].iloc[0]) if not cpc.empty else fmt_season(query("SELECT MAX(season) AS s FROM transfers")["s"].iloc[0])
+            with st.expander(f"🔄 Current Portal Class ({cpc_season_label}) — Committed, Not Yet Played", expanded=False):
+                st.caption(
+                    "These players have committed to a new school but haven't played a game there yet — "
+                    "**Skill Index Before** only. No verdict or Skill Index After until they log real minutes."
+                )
+                cpc["from_tier_label"] = cpc["from_tier"].map(TIER_LABELS)
+                cpc["to_tier_label"]   = cpc["to_tier"].map(TIER_LABELS)
+                cpc_show = cpc[["full_name", "position", "from_school", "from_tier_label",
+                                 "to_school", "to_tier_label", "skill_index_before"]].rename(columns={
+                    "full_name":       "Player",
+                    "position":        "Pos",
+                    "from_school":     "From",
+                    "from_tier_label": "From Tier",
+                    "to_school":       "To",
+                    "to_tier_label":   "To Tier",
+                    "skill_index_before": "Skill Index Before",
+                })
+                st.dataframe(cpc_show.sort_values("Skill Index Before", ascending=False),
+                             use_container_width=True, hide_index=True)
     except Exception as e:
         st.info(f"No data yet — run ETL scripts first. ({e})")
 
