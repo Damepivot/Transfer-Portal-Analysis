@@ -649,7 +649,7 @@ with tabX:
         fig_route.add_vline(x=50, line_dash="dot", line_color="#FF6B00", opacity=0.5,
                             annotation_text="50% line", annotation_position="top right")
         fig_route.update_layout(margin=dict(t=10, b=10), height=max(350, len(route_df) * 28))
-        st.plotly_chart(fig_route, use_container_width=True)
+        st.plotly_chart(fig_route)
 
         st.markdown("---")
 
@@ -684,7 +684,7 @@ with tabX:
             fig_orig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.3)
             fig_orig.update_traces(texttemplate="%{text:+.2f}", textposition="outside")
             fig_orig.update_layout(margin=dict(t=5, b=5), height=420, coloraxis_showscale=False)
-            st.plotly_chart(fig_orig, use_container_width=True)
+            st.plotly_chart(fig_orig)
 
             worst_origin_df = query("""
                 SELECT from_school, COUNT(*) as n,
@@ -733,7 +733,7 @@ with tabX:
             fig_dest.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.3)
             fig_dest.update_traces(texttemplate="%{text:+.2f}", textposition="outside")
             fig_dest.update_layout(margin=dict(t=5, b=5), height=420, coloraxis_showscale=False)
-            st.plotly_chart(fig_dest, use_container_width=True)
+            st.plotly_chart(fig_dest)
 
             worst_dest_df = query("""
                 SELECT to_school, COUNT(*) as n,
@@ -876,7 +876,7 @@ with tabX:
                 margin=dict(t=20, b=10),
                 height=300,
             )
-            st.plotly_chart(fig_nil, use_container_width=True)
+            st.plotly_chart(fig_nil)
 
         st.markdown("---")
 
@@ -1159,7 +1159,7 @@ with tab1:
                 labels={"x": "Destination Tier", "y": "Origin Tier", "color": "Transfers"},
             )
             fig.update_layout(margin=dict(t=20, b=20))
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig)
         except Exception as e:
             st.info(f"No data yet. ({e})")
 
@@ -1182,7 +1182,7 @@ with tab1:
             vol["season"] = vol["season"].apply(fmt_season)
             fig = px.bar(vol, x="season", y="transfers", color_discrete_sequence=["#2e75b6"])
             fig.update_layout(margin=dict(t=20, b=20), xaxis_title="", yaxis_title="# Transfers")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig)
         except Exception as e:
             st.info(f"No data yet. ({e})")
 
@@ -1300,7 +1300,7 @@ with tab2:
                 fig.add_vline(x=0, line_dash="dash", line_color="white", opacity=0.5)
                 fig.update_layout(margin=dict(t=10, b=10), legend_title="Verdict",
                                   height=max(400, len(display) * 22))
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig)
             else:
                 st.info("Not enough players with peer baselines to display. Run ETL first.")
 
@@ -1326,7 +1326,7 @@ with tab2:
                         "transfer_verdict": "Verdict"},
             )
             fig2.update_layout(margin=dict(t=10, b=10), legend_title="")
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2)
 
         st.markdown("---")
         st.subheader("Full Transfer Table")
@@ -1451,7 +1451,7 @@ with tab3:
             labels={"x": "Destination Tier", "y": "Origin Tier", "color": "Success %"},
         )
         fig.update_layout(margin=dict(t=20, b=20))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig)
 
         st.markdown("---")
 
@@ -1472,7 +1472,7 @@ with tab3:
                 labels={"dest_label": "Destination Tier", "avg_premium": "Avg Transfer Premium", "position": "Position"},
             )
             fig2.update_layout(margin=dict(t=20, b=20))
-            st.plotly_chart(fig2, use_container_width=True)
+            st.plotly_chart(fig2)
 
         with col_r:
             st.subheader("Expected Transfer Premium by Tier Move")
@@ -1490,7 +1490,7 @@ with tab3:
                 labels={"avg_premium": "Avg Transfer Premium", "move": ""},
             )
             fig3.update_layout(margin=dict(t=20, b=20), coloraxis_showscale=False)
-            st.plotly_chart(fig3, use_container_width=True)
+            st.plotly_chart(fig3)
 
         st.markdown("---")
 
@@ -1520,7 +1520,7 @@ with tab3:
                     title="Avg Height by Position & Verdict",
                 )
                 fig5.update_layout(margin=dict(t=40, b=20))
-                st.plotly_chart(fig5, use_container_width=True)
+                st.plotly_chart(fig5)
             with col_s2:
                 fig6 = px.bar(
                     size_df, x="position", y="avg_weight", color="transfer_verdict",
@@ -1529,7 +1529,7 @@ with tab3:
                     title="Avg Weight by Position & Verdict",
                 )
                 fig6.update_layout(margin=dict(t=40, b=20))
-                st.plotly_chart(fig6, use_container_width=True)
+                st.plotly_chart(fig6)
 
             # Scatter: height vs skill index
             scatter_sql = """
@@ -1549,7 +1549,7 @@ with tab3:
                 title="Height vs Skill Index by Position",
             )
             fig7.update_layout(margin=dict(t=40, b=20))
-            st.plotly_chart(fig7, use_container_width=True)
+            st.plotly_chart(fig7)
         else:
             st.info("Height/weight data populates after re-running scrape_on3.py and load_real_data.py.")
 
@@ -1619,7 +1619,7 @@ with tab4:
                 title="Pre-Transfer Skill Index: Successful vs Unsuccessful Transfers",
             )
             fig_profile.update_layout(margin=dict(t=40, b=20))
-            st.plotly_chart(fig_profile, use_container_width=True)
+            st.plotly_chart(fig_profile)
 
         # USG% profile
         col_usg_l, col_usg_r = st.columns(2)
@@ -1639,7 +1639,7 @@ with tab4:
                 title="Pre-Transfer Usage Rate",
             )
             fig_usg.update_layout(margin=dict(t=40, b=20))
-            st.plotly_chart(fig_usg, use_container_width=True)
+            st.plotly_chart(fig_usg)
 
         with col_usg_r:
             if filtered["avg_height_in"].notna().any():
@@ -1652,7 +1652,7 @@ with tab4:
                 )
                 fig_size.update_traces(textposition="top center")
                 fig_size.update_layout(margin=dict(t=40, b=20))
-                st.plotly_chart(fig_size, use_container_width=True)
+                st.plotly_chart(fig_size)
 
         # ── Section 2: What to Expect at the New Level ──────────────────────────
         st.markdown("---")
@@ -1693,7 +1693,7 @@ with tab4:
             fig_ctx.add_hline(y=0, line_dash="dot", line_color="#888",
                               annotation_text="Met expectations", annotation_position="right")
             fig_ctx.update_layout(margin=dict(t=40, b=20))
-            st.plotly_chart(fig_ctx, use_container_width=True)
+            st.plotly_chart(fig_ctx)
 
         # Success rate heatmap by route
         st.markdown("---")
@@ -1707,7 +1707,7 @@ with tab4:
             title=f"% of transfers who became High Value or Solid Addition at {selected_rec_dest}",
         )
         fig_heat.update_layout(margin=dict(t=50, b=20))
-        st.plotly_chart(fig_heat, use_container_width=True)
+        st.plotly_chart(fig_heat)
 
     except Exception as e:
         st.info(f"No data yet — run ETL scripts first. ({e})")
@@ -1989,7 +1989,7 @@ with tab5:
                     margin=dict(t=10, b=10), coloraxis_showscale=True,
                     coloraxis_colorbar=dict(title="Success %", thickness=12),
                 )
-                st.plotly_chart(fig_proj, use_container_width=True)
+                st.plotly_chart(fig_proj)
 
                 # ── SECTION B: Best Leagues for Your Profile ──────────────────────
                 st.markdown("---")
@@ -2074,7 +2074,7 @@ with tab5:
                                     margin=dict(t=5, b=5), coloraxis_showscale=False,
                                     height=max(180, len(tc) * 32),
                                 )
-                                st.plotly_chart(fig_conf, use_container_width=True)
+                                st.plotly_chart(fig_conf)
                             with col_conf_table:
                                 st.dataframe(
                                     display_conf.style.apply(color_conf_row, axis=1),
@@ -2593,7 +2593,7 @@ with tab6:
                                             color_discrete_map=VERDICT_COLORS,
                                             category_orders={"Verdict": VERDICT_DISPLAY_ORDER})
                                 fv.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                                st.plotly_chart(fv, use_container_width=True)
+                                st.plotly_chart(fv)
                             with col_bx:
                                 st.markdown("**Skill Index Before → After**")
                                 bm = same_tier[["skill_index_before","skill_index_after"]].dropna().melt(
@@ -2603,7 +2603,7 @@ with tab6:
                                             color_discrete_map={"Before":"#2e75b6","After":"#2ecc71"})
                                 fb.add_hline(y=0, line_dash="dash", line_color="white", opacity=0.4)
                                 fb.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                                st.plotly_chart(fb, use_container_width=True)
+                                st.plotly_chart(fb)
 
                         mc1, mc2, mc3, mc4 = st.columns(4)
                         mc1.metric("Strong Matches", strong_n)
@@ -2794,7 +2794,7 @@ with tab6:
                             color_discrete_sequence=px.colors.qualitative.Set2,
                         )
                         fig_orig.update_layout(margin=dict(t=10, b=10))
-                        st.plotly_chart(fig_orig, use_container_width=True)
+                        st.plotly_chart(fig_orig)
 
                     with col_phys:
                         st.markdown(f"**Pre-Transfer Skill Index Distribution**")
@@ -2811,7 +2811,7 @@ with tab6:
                                 annotation_position="top right",
                             )
                             fig_hist.update_layout(margin=dict(t=10, b=10), showlegend=False)
-                            st.plotly_chart(fig_hist, use_container_width=True)
+                            st.plotly_chart(fig_hist)
                         else:
                             st.info("Not enough D1-origin players to show Skill Index distribution.")
 
