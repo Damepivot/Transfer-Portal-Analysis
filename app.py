@@ -380,7 +380,7 @@ dest_tiers = ["All"] + TIER_ORDER
 selected_dest = st.sidebar.selectbox("Destination Tier", dest_tiers, format_func=lambda x: TIER_LABELS.get(x, x))
 
 st.sidebar.markdown("---")
-st.sidebar.caption("Data: CBB Reference · Kaggle · On3 · 2021–25")
+st.sidebar.caption("Data: CBB Reference · Kaggle · On3 · 2021–26")
 
 
 def season_filter(col="tr.season"):
@@ -449,7 +449,7 @@ with tab0:
       <p style="color:#CCCCCC; font-size:1.0rem; line-height:1.7; max-width:720px; margin-bottom:28px;">
         Pivot Hoops is a data platform built for <strong style="color:#FF6B00;">coaches</strong> and
         <strong style="color:#FF6B00;">players</strong> navigating the transfer portal.
-        We track every D1 portal movement — over <strong>9,000 transfers</strong> across
+        We track every D1 portal movement — over <strong>8,000 transfers</strong> across
         <strong>350 schools</strong> — and score each one using real Box Plus/Minus, usage rate,
         and shooting efficiency data from College Basketball Reference. No projections. No
         estimates. Real stats only.
@@ -464,7 +464,7 @@ with tab0:
             Use the <strong>Coach Search</strong> tab to find your next portal target.
             Set a minimum Skill Index — the production floor you need — and
             see every player who historically delivered that at your tier.
-            The <strong>Transfer Pool</strong> shows all 9,000+ portal movements with
+            The <strong>Transfer Pool</strong> shows all 8,000+ portal movements with
             🟢 <em>In Your Range</em> flags so you know who's realistically attainable.
           </p>
         </div>
@@ -561,7 +561,7 @@ with tab0:
 # ═══════════════════════════════════════════════════════════════════════════════
 with tabX:
     st.title("📣 Major Takeaways")
-    st.caption("Five years of portal data. Here's what it says.")
+    st.caption("Six years of portal data. Here's what it says.")
 
     try:
         # ── Hero numbers ──────────────────────────────────────────────────────
@@ -699,7 +699,7 @@ with tabX:
                 GROUP BY from_school HAVING COUNT(*) >= 8  -- 8 minimum so one bad season doesn't tank a school
                 ORDER BY median_idx ASC LIMIT 10
             """)
-            with st.expander("Worst Starter Schools"):
+            with st.expander("Worst Feeder Programs"):
                 st.caption("Players left these programs and struggled at their next stop.")
                 for _, r in worst_origin_df.iterrows():
                     st.markdown(
@@ -998,10 +998,10 @@ with tabL:
 
         <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px; padding:18px 20px;">
           <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            Only 37% of Transfers Are Scored
+            ~49% of Transfers Are Scored
           </div>
           <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            3,025 of 8,208 portal entries have a score. To be scored, a player needs BPM data
+            4,073 of 8,252 portal entries have a score. To be scored, a player needs BPM data
             at both their origin school and their destination — meaning meaningful minutes at both stops.
             Players who transferred mid-development, went pro, or sat out a year are invisible here.
           </p>
@@ -1062,10 +1062,10 @@ with tabL:
       <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px;
                   padding:20px 24px; display:grid; grid-template-columns:1fr 1fr; gap:12px 32px;">
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;8,208 transfers tracked across 350 of 364 D1 schools
+          ✅ &nbsp;8,252 transfers tracked across 350 of 364 D1 schools
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;2020-21 through 2025-26 — five full portal-era seasons
+          ✅ &nbsp;2020-21 through 2025-26 — six full portal-era seasons
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
           ✅ &nbsp;Deduplicated with a database-level UNIQUE constraint
@@ -1077,7 +1077,7 @@ with tabL:
           ✅ &nbsp;Peer baselines account for tier and recruiting composite
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;Context score applies tier weights so high major production ranks higher
+          ✅ &nbsp;Skill Index z-scores each component so BPM, usage, and efficiency are on one comparable scale
         </div>
       </div>
 
@@ -1100,7 +1100,7 @@ with tab1:
         SELECT
             COUNT(*)                                          AS total_transfers,
             COUNT(DISTINCT t.player_id)                      AS unique_players,
-            COUNT(DISTINCT t.to_team_id)                     AS destination_teams,
+            COUNT(DISTINCT t_to.name)                        AS destination_teams,
             ROUND(AVG(ps.usg_pct)::numeric, 1)               AS avg_usg,
             ROUND(AVG(its.skill_index_after)::numeric, 2)    AS avg_skill_index
         FROM transfers t
