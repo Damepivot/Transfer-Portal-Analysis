@@ -2245,7 +2245,7 @@ with tab6:
         "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
     )
 
-    pool_col1, pool_col2, pool_col3, pool_col4 = st.columns(4)
+    pool_col1, pool_col2, pool_col3 = st.columns(3)
     with pool_col1:
         pool_skill_min = st.slider(
             "Min Skill Index (prev school)", -3.0, 3.0, -3.0, 0.1,
@@ -2255,15 +2255,10 @@ with tab6:
     with pool_col2:
         pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season", format_func=lambda x: x if x == "All" else fmt_season(x))
     with pool_col3:
-        pool_pos = st.multiselect(
-            "Position(s)", ["G", "F", "C"],
-            default=[], key="pool_pos",
-            placeholder="Any position",
-        )
-    with pool_col4:
         pool_show_all = st.checkbox(
             "Show all tiers (not just in-range)", value=False, key="pool_show_all"
         )
+    pool_pos = coach_prior_position  # inherits from Position & Origin above
 
     pool_sql = """
         SELECT
@@ -2286,14 +2281,7 @@ with tab6:
         pool_sql += " AND its.season = %s"
         pool_params.append(pool_season)
     if pool_pos:
-        adjacent = {
-            "G": ["G","G/F"], "G/F": ["G","G/F","F"],
-            "F": ["G/F","F","F/C"], "F/C": ["F","F/C","C"], "C": ["F/C","C"],
-        }
-        pos_pool_set = set()
-        for p in pool_pos:
-            pos_pool_set.update(adjacent.get(p, [p]))
-        pos_pool_list = list(pos_pool_set)
+        pos_pool_list = expand_positions(pool_pos)
         pool_sql += f" AND its.position IN ({','.join(['%s']*len(pos_pool_list))})"
         pool_params.extend(pos_pool_list)
 
