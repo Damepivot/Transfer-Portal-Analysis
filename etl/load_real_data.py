@@ -1122,9 +1122,11 @@ def main():
     else:
         print("No CBB Reference stats found — run etl/scrape_cbb_reference.py first")
 
-    # ── Refresh materialized view ─────────────────────────────────────────────
-    print("Refreshing tier_pair_expectations...")
+    # ── Refresh materialized views ────────────────────────────────────────────
+    print("Refreshing materialized views...")
     cur.execute("REFRESH MATERIALIZED VIEW tier_pair_expectations")
+    cur.execute("REFRESH MATERIALIZED VIEW tier_pair_fallback")
+    cur.execute("REFRESH MATERIALIZED VIEW individual_transfer_scores")
     conn.commit()
 
     # ── Summary ───────────────────────────────────────────────────────────────

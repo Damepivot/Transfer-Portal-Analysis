@@ -38,7 +38,20 @@ import pandas as pd
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from db import DB_CONFIG
+
+if "--local" in sys.argv:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+    import os
+    DB_CONFIG = {
+        "dbname":   os.getenv("DB_NAME", "ncaa_transfers"),
+        "user":     os.getenv("DB_USER", ""),
+        "host":     os.getenv("DB_HOST", "localhost"),
+        "port":     int(os.getenv("DB_PORT", 5432)),
+        "password": os.getenv("DB_PASSWORD", ""),
+    }
+else:
+    from db import DB_CONFIG
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "raw"
 
@@ -100,6 +113,7 @@ BT_HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) App
 BT_SEASON_MAP = {
     "2020-21": 2021, "2021-22": 2022,
     "2022-23": 2023, "2023-24": 2024, "2024-25": 2025,
+    "2025-26": 2026,
 }
 
 
@@ -220,7 +234,7 @@ def main():
         JOIN players p ON ps.player_id = p.player_id
         JOIN teams   t ON ps.team_id   = t.team_id
         WHERE ps.bpm IS NULL
-          AND ps.season != '2025-26'
+          AND ps.season != '2026-27'
         ORDER BY ps.season, p.full_name
     """)
     missing = cur.fetchall()
@@ -363,14 +377,16 @@ def main():
     print(f"  {cur.rowcount} post-transfer injury/limited rows → BPM = -1.0 (Didn't Fit)")
     conn.commit()
 
-    # Refresh materialized view so scoring picks up the new stats
-    print("Refreshing tier_pair_expectations...")
+    # Refresh materialized views so scoring picks up the new stats
+    print("Refreshing materialized views...")
     cur.execute("REFRESH MATERIALIZED VIEW tier_pair_expectations")
+    cur.execute("REFRESH MATERIALIZED VIEW tier_pair_fallback")
+    cur.execute("REFRESH MATERIALIZED VIEW individual_transfer_scores")
     conn.commit()
 
     cur.execute("SELECT COUNT(*) FROM individual_transfer_scores")
     scored = cur.fetchone()[0]
-    cur.execute("SELECT COUNT(*) FROM player_seasons WHERE bpm IS NULL AND season != '2025-26'")
+    cur.execute("SELECT COUNT(*) FROM player_seasons WHERE bpm IS NULL AND season != '2026-27'")
     blank = cur.fetchone()[0]
 
     cur.close()

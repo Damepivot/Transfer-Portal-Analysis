@@ -9,7 +9,7 @@
 -- Views defined here:
 --   0. skill_index_pop_stats                  — population mean/SD for z-scoring
 --   1. tier_pair_expectations  (MATERIALIZED) — peer skill_index baseline by route
---   2. individual_transfer_scores             — main scoring view per player
+--   2. individual_transfer_scores (MATERIALIZED) — main scoring view per player
 --   3. team_transfer_report                   — per-team transfer class outcomes
 --   4. recruitment_profiles                   — what profile succeeds by route
 --   5. league_transfer_trends                 — season-by-season trends by tier pair
@@ -27,6 +27,7 @@ DROP VIEW IF EXISTS league_transfer_trends     CASCADE;
 DROP VIEW IF EXISTS recruitment_profiles       CASCADE;
 DROP VIEW IF EXISTS team_transfer_report       CASCADE;
 DROP VIEW IF EXISTS individual_transfer_scores CASCADE;
+DROP MATERIALIZED VIEW IF EXISTS individual_transfer_scores CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS tier_pair_fallback     CASCADE;
 DROP MATERIALIZED VIEW IF EXISTS tier_pair_expectations CASCADE;
 DROP VIEW IF EXISTS skill_index_pop_stats CASCADE;
@@ -196,7 +197,7 @@ HAVING COUNT(*) >= 5;
 -- Small samples are excluded: players with < 12 games are nulled
 -- in load_real_data.py before reaching this view.
 -- ============================================================
-CREATE OR REPLACE VIEW individual_transfer_scores AS
+CREATE MATERIALIZED VIEW individual_transfer_scores AS
 
 -- Step 1: Bucket each player into an elite/high/mid/low recruiting tier.
 -- This is used both to segment the peer baseline and to label the player.
