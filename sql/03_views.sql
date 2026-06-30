@@ -405,6 +405,7 @@ scored AS (
     -- Usage rate change: positive = expanded role, negative = reduced role
     CASE WHEN usage_before IS NOT NULL THEN ROUND(usage_after - usage_before, 1) END AS usg_change,
 
+    efficiency_before,
     efficiency_after,
     obpm_after,
     dbpm_after,

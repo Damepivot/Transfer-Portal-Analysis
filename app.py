@@ -2245,15 +2245,18 @@ with tab6:
         "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
     )
 
-    pool_col1, pool_col2 = st.columns(2)
+    pool_col1, pool_col2, pool_col3, pool_col4 = st.columns(4)
     with pool_col1:
-        pool_skill_min = st.slider(
-            "Min Skill Index (prev school)", -3.0, 3.0, -3.0, 0.1,
-            key="pool_skill_min",
-            help="Floor on Skill Index at their previous school. -3.0 = no floor (show everyone).",
-        )
-    with pool_col2:
         pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season", format_func=lambda x: x if x == "All" else fmt_season(x))
+    with pool_col2:
+        pool_bpm_min = st.slider("Min BPM (prev school)", -10.0, 10.0, -10.0, 0.5,
+            key="pool_bpm_min", help="Box Plus/Minus at previous school. -10 = no floor.")
+    with pool_col3:
+        pool_usg_min = st.slider("Min USG% (prev school)", 10.0, 35.0, 10.0, 1.0,
+            key="pool_usg_min", help="Usage rate at previous school. 10 = no floor.")
+    with pool_col4:
+        pool_ts_min = st.slider("Min TS% (prev school)", 35.0, 65.0, 35.0, 1.0,
+            key="pool_ts_min", help="True Shooting % at previous school. 35 = no floor.")
     pool_pos = coach_prior_position  # inherits from Position & Origin above
 
     pool_sql = """
@@ -2262,17 +2265,25 @@ with tab6:
             its.from_school, its.from_tier,
             its.to_school, its.to_tier,
             its.season,
+            its.bpm_before, its.usage_before, its.efficiency_before,
             its.skill_index_before, its.skill_index_after,
-            its.usage_before, its.usage_after,
             its.transfer_verdict, its.recruiting_composite,
             p.height_in, p.weight_lbs
         FROM individual_transfer_scores its
         JOIN players p ON its.player_id = p.player_id
-        WHERE its.skill_index_before >= %s
-          AND its.to_tier NOT IN ('sub_d1', 'international')
+        WHERE its.to_tier NOT IN ('sub_d1', 'international')
     """
-    pool_params = [pool_skill_min]
+    pool_params = []
 
+    if pool_bpm_min > -10.0:
+        pool_sql += " AND its.bpm_before >= %s"
+        pool_params.append(pool_bpm_min)
+    if pool_usg_min > 10.0:
+        pool_sql += " AND its.usage_before >= %s"
+        pool_params.append(pool_usg_min)
+    if pool_ts_min > 35.0:
+        pool_sql += " AND its.efficiency_before >= %s"
+        pool_params.append(pool_ts_min / 100.0)
     if pool_season != "All":
         pool_sql += " AND its.season = %s"
         pool_params.append(pool_season)
@@ -2281,20 +2292,18 @@ with tab6:
         pool_sql += f" AND its.position IN ({','.join(['%s']*len(pos_pool_list))})"
         pool_params.extend(pos_pool_list)
 
-    pool_sql += " ORDER BY its.skill_index_before DESC NULLS LAST"
+    pool_sql += " ORDER BY its.bpm_before DESC NULLS LAST"
 
     try:
-        pool_df = query(pool_sql, pool_params)
+        pool_df = query(pool_sql, pool_params or None)
 
         if pool_df.empty:
-            st.info("No players match that floor. Try lowering Min Skill Index or broadening position/season filters.")
+            st.info("No players match those filters. Try loosening BPM, USG%, or TS% minimums.")
         else:
             coach_rank = TIER_RANK.get(coach_dest_tier, 4)
             pool_df["in_range"] = pool_df["to_tier"].apply(
                 lambda t: TIER_RANK.get(t, 4) >= coach_rank
             )
-            if not pool_show_all:
-                pool_df = pool_df[pool_df["in_range"]].copy()
 
             pool_df["to_tier_label"]   = pool_df["to_tier"].map(TIER_LABELS)
             pool_df["from_tier_label"] = pool_df["from_tier"].map(TIER_LABELS)
@@ -2312,30 +2321,34 @@ with tab6:
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("In Pool",              len(pool_df))
             m2.metric("🟢 In Your Range",     len(in_range_df))
-            m3.metric("Avg Skill Index (prev)", f"{pool_df['skill_index_before'].mean():+.2f}" if pool_df["skill_index_before"].notna().any() else "—")
-            m4.metric("Met or Beat Projection", int(pool_df["transfer_verdict"].isin(sv).sum()))
+            m3.metric("Avg BPM (prev school)", f"{pool_df['bpm_before'].mean():+.1f}" if pool_df["bpm_before"].notna().any() else "—")
+            m4.metric("Positive Outcome",      int(pool_df["transfer_verdict"].isin(sv).sum()))
 
+            pool_df["ts_pct_str"] = pool_df["efficiency_before"].apply(
+                lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
+            )
             _pool_cols = [
                 "full_name", "position", "height_str", "weight_lbs",
                 "season", "from_school", "from_tier_label",
                 "to_school", "to_tier_label",
-                "skill_index_before", "skill_index_after", "usage_before",
-                "transfer_verdict",
+                "bpm_before", "usage_before", "ts_pct_str",
+                "skill_index_after", "transfer_verdict",
             ]
             _pool_rename = {
-                "full_name":          "Player",
-                "position":           "Pos",
-                "height_str":         "Height",
-                "weight_lbs":         "Wt",
-                "season":             "Season",
-                "from_school":        "From",
-                "from_tier_label":    "From Tier",
-                "to_school":          "To",
-                "to_tier_label":      "To Tier",
-                "skill_index_before": "Skill Index (prev school)",
-                "skill_index_after":  "Skill Index (after move)",
-                "usage_before":       "USG% (prev)",
-                "transfer_verdict":   "Outcome",
+                "full_name":        "Player",
+                "position":         "Pos",
+                "height_str":       "Height",
+                "weight_lbs":       "Wt",
+                "season":           "Season",
+                "from_school":      "From",
+                "from_tier_label":  "From Tier",
+                "to_school":        "To",
+                "to_tier_label":    "To Tier",
+                "bpm_before":       "BPM (prev)",
+                "usage_before":     "USG% (prev)",
+                "ts_pct_str":       "TS% (prev)",
+                "skill_index_after": "Skill Index (outcome)",
+                "transfer_verdict": "Outcome",
             }
 
             st.markdown(f"#### 🟢 In Your Range — {len(in_range_df)} players")
@@ -2357,8 +2370,8 @@ with tab6:
                 st.dataframe(above_df[_pool_cols].rename(columns=_pool_rename), hide_index=True, height=300)
 
             st.caption(
-                "**Skill Index (prev school)** = what you'd see scouting them in the portal. "
-                "**Outcome** = what they actually delivered after transferring (historical context)."
+                "**BPM / USG% / TS%** = stats at their previous school — what you'd see scouting them. "
+                "**Skill Index (outcome)** = blended performance score at their new school (historical result)."
             )
 
             # Unscored transfers (no Skill Index yet)
