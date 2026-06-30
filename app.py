@@ -2245,7 +2245,7 @@ with tab6:
         "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
     )
 
-    pool_col1, pool_col2, pool_col3 = st.columns(3)
+    pool_col1, pool_col2 = st.columns(2)
     with pool_col1:
         pool_skill_min = st.slider(
             "Min Skill Index (prev school)", -3.0, 3.0, -3.0, 0.1,
@@ -2254,10 +2254,6 @@ with tab6:
         )
     with pool_col2:
         pool_season = st.selectbox("Season", ["All"] + sorted(seasons, reverse=True), key="pool_season", format_func=lambda x: x if x == "All" else fmt_season(x))
-    with pool_col3:
-        pool_show_all = st.checkbox(
-            "Show all tiers (not just in-range)", value=False, key="pool_show_all"
-        )
     pool_pos = coach_prior_position  # inherits from Position & Origin above
 
     pool_sql = """
@@ -2300,34 +2296,33 @@ with tab6:
             if not pool_show_all:
                 pool_df = pool_df[pool_df["in_range"]].copy()
 
-            pool_df["fit"]             = pool_df["in_range"].map({True: "🟢 In Your Range", False: "⚪ Higher Tier"})
             pool_df["to_tier_label"]   = pool_df["to_tier"].map(TIER_LABELS)
             pool_df["from_tier_label"] = pool_df["from_tier"].map(TIER_LABELS)
             pool_df["height_str"]      = pool_df["height_in"].apply(
                 lambda x: f"{int(x)//12}\'{int(x)%12}\"" if pd.notna(x) else "—"
             )
-
-            in_range_n = pool_df["in_range"].sum()
-            sv = {"High Value", "Solid Addition", "Exceeded Expectations"}
-            success_n  = pool_df["transfer_verdict"].isin(sv).sum()
-
-            m1, m2, m3, m4 = st.columns(4)
-            m1.metric("In Pool", len(pool_df))
-            m2.metric("🟢 In Your Range", int(in_range_n))
-            m3.metric("Avg Skill Index (prev)", f"{pool_df['skill_index_before'].mean():+.2f}" if pool_df["skill_index_before"].notna().any() else "—")
-            m4.metric("Met or Beat Projection", int(success_n))
-
             pool_df["season"] = pool_df["season"].apply(fmt_season)
             if "transfer_verdict" in pool_df.columns:
                 pool_df["transfer_verdict"] = pool_df["transfer_verdict"].apply(fmt_verdict)
-            display_pool = pool_df[[
-                "fit", "full_name", "position", "height_str", "weight_lbs",
+
+            in_range_df  = pool_df[pool_df["in_range"]].copy()
+            above_df     = pool_df[~pool_df["in_range"]].copy()
+            sv = {"Above Projection", "High-Impact Acquisition", "Positive Acquisition"}
+
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("In Pool",              len(pool_df))
+            m2.metric("🟢 In Your Range",     len(in_range_df))
+            m3.metric("Avg Skill Index (prev)", f"{pool_df['skill_index_before'].mean():+.2f}" if pool_df["skill_index_before"].notna().any() else "—")
+            m4.metric("Met or Beat Projection", int(pool_df["transfer_verdict"].isin(sv).sum()))
+
+            _pool_cols = [
+                "full_name", "position", "height_str", "weight_lbs",
                 "season", "from_school", "from_tier_label",
                 "to_school", "to_tier_label",
                 "skill_index_before", "skill_index_after", "usage_before",
                 "transfer_verdict",
-            ]].rename(columns={
-                "fit":                "Range",
+            ]
+            _pool_rename = {
                 "full_name":          "Player",
                 "position":           "Pos",
                 "height_str":         "Height",
@@ -2341,25 +2336,33 @@ with tab6:
                 "skill_index_after":  "Skill Index (after move)",
                 "usage_before":       "USG% (prev)",
                 "transfer_verdict":   "Outcome",
-            })
+            }
 
-            def _color_pool_row(row):
-                if "🟢" in str(row.get("Range", "")):
-                    return ["background-color: rgba(255,107,0,0.12)"] * len(row)
-                return [""] * len(row)
+            st.markdown(f"#### 🟢 In Your Range — {len(in_range_df)} players")
+            st.caption("Players who historically transferred to programs at your tier or below. These are your realistic targets.")
+            if in_range_df.empty:
+                st.info("No in-range players match these filters. Try lowering the Min Skill Index.")
+            else:
+                st.dataframe(in_range_df[_pool_cols].rename(columns=_pool_rename), hide_index=True, height=380)
 
-            st.dataframe(
-                display_pool.style.apply(_color_pool_row, axis=1),
-                hide_index=True,
-                height=420,
+            st.markdown(f"#### 🌟 Above Your Level — {len(above_df)} players")
+            st.caption(
+                f"Players who historically went to **higher-tier** programs than {TIER_LABELS[coach_dest_tier]}. "
+                "Historically out of range — but a strong pitch, more playing time, or the right fit could land one. "
+                "Skill Index shown is from their **previous school** before that move."
             )
+            if above_df.empty:
+                st.info("No above-level players in this filter set.")
+            else:
+                st.dataframe(above_df[_pool_cols].rename(columns=_pool_rename), hide_index=True, height=300)
+
             st.caption(
                 "**Skill Index (prev school)** = what you'd see scouting them in the portal. "
                 "**Outcome** = what they actually delivered after transferring (historical context)."
             )
 
-            # Also show unscored transfers (portal activity from all 364 schools, no skill_index req)
-            if pool_show_all or pool_skill_min <= -3.0:
+            # Unscored transfers (no Skill Index yet)
+            if pool_skill_min <= -3.0:
                 try:
                     unscored_sql = """
                         SELECT DISTINCT
