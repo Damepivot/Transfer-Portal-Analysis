@@ -41,39 +41,6 @@ st.set_page_config(
 )
 
 # ── Password gate ─────────────────────────────────────────────────────────────
-# Only active when APP_PASSWORD is set in st.secrets (i.e. on Streamlit Cloud).
-# Locally there is no secret, so the gate is skipped automatically.
-def _check_password():
-    try:
-        required = st.secrets["APP_PASSWORD"]
-    except Exception:
-        return   # no password configured — skip gate (local dev)
-
-    if st.session_state.get("authenticated"):
-        return
-
-    st.html("""
-    <div style="max-width:400px; margin:80px auto; text-align:center;">
-      <div style="font-size:2.5rem; font-weight:900; color:#FF6B00;
-                  letter-spacing:0.1em; margin-bottom:4px;">PIVOT HOOPS</div>
-      <div style="color:#888; font-size:0.85rem; margin-bottom:32px;">
-        Transfer Portal Intelligence
-      </div>
-    </div>
-    """)
-    col = st.columns([1, 2, 1])[1]
-    with col:
-        pw = st.text_input("Password", type="password", label_visibility="collapsed",
-                           placeholder="Enter password")
-        if st.button("Enter", type="primary"):
-            if pw == required:
-                st.session_state.authenticated = True
-                st.rerun()
-            else:
-                st.error("Wrong password.")
-    st.stop()
-
-_check_password()
 
 # ── PivotHoops Brand CSS ──────────────────────────────────────────────────────
 st.html("""
