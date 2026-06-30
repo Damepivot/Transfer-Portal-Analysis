@@ -2374,8 +2374,8 @@ with tab6:
                 "**Skill Index (outcome)** = blended performance score at their new school (historical result)."
             )
 
-            # Unscored transfers (no Skill Index yet)
-            if pool_skill_min <= -3.0:
+            # Unscored transfers — only relevant when no stat filters are active
+            if pool_bpm_min <= -10.0 and pool_usg_min <= 10.0 and pool_ts_min <= 35.0:
                 try:
                     unscored_sql = """
                         SELECT DISTINCT
