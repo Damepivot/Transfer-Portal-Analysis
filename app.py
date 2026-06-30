@@ -65,7 +65,7 @@ def _check_password():
     with col:
         pw = st.text_input("Password", type="password", label_visibility="collapsed",
                            placeholder="Enter password")
-        if st.button("Enter", use_container_width=True, type="primary"):
+        if st.button("Enter", type="primary"):
             if pw == required:
                 st.session_state.authenticated = True
                 st.rerun()
@@ -340,6 +340,9 @@ def query(sql: str, params=None) -> pd.DataFrame:
     finally:
         conn.close()
 
+
+# Force dataframes to stretch across their column in all Streamlit versions
+st.markdown("<style>[data-testid='stDataFrame'] { width: 100% !important; } [data-testid='stDataFrame'] > div { width: 100% !important; }</style>", unsafe_allow_html=True)
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.html("""
@@ -933,8 +936,7 @@ with tabX:
                         "skill_index_before":"Skill Index Before","skill_index_after":"Skill Index After",
                         "transfer_premium":"Premium","transfer_verdict":"Verdict",
                         "move":"Move",
-                    }),
-                    use_container_width=True, hide_index=True,
+                    }), hide_index=True,
                 )
 
     except Exception as e:
@@ -1362,7 +1364,6 @@ with tab2:
                 "transfer_premium":   "Premium",
                 "transfer_verdict":   "Verdict",
             }),
-            use_container_width=True,
             hide_index=True,
         )
 
@@ -1405,8 +1406,7 @@ with tab2:
                     "to_tier_label":   "To Tier",
                     "skill_index_before": "Skill Index Before",
                 })
-                st.dataframe(cpc_show.sort_values("Skill Index Before", ascending=False),
-                             use_container_width=True, hide_index=True)
+                st.dataframe(cpc_show.sort_values("Skill Index Before", ascending=False), hide_index=True)
     except Exception as e:
         st.info(f"No data yet — run ETL scripts first. ({e})")
 
@@ -1597,8 +1597,7 @@ with tab4:
             }
             st.dataframe(
                 filtered[[c for c in profile_cols if c in filtered.columns]]
-                .rename(columns=profile_cols),
-                use_container_width=True, hide_index=True,
+                .rename(columns=profile_cols), hide_index=True,
             )
 
         with col_r:
@@ -1678,8 +1677,7 @@ with tab4:
             }
             st.dataframe(
                 filtered[[c for c in expect_cols if c in filtered.columns]]
-                .rename(columns=expect_cols),
-                use_container_width=True, hide_index=True,
+                .rename(columns=expect_cols), hide_index=True,
             )
 
         with col_e_r:
@@ -2077,8 +2075,7 @@ with tab5:
                                 st.plotly_chart(fig_conf)
                             with col_conf_table:
                                 st.dataframe(
-                                    display_conf.style.apply(color_conf_row, axis=1),
-                                    use_container_width=True, hide_index=True,
+                                    display_conf.style.apply(color_conf_row, axis=1), hide_index=True,
                                 )
 
                 # ── SECTION C: Comparable Players — Strong / Athletic / Weak ──────
@@ -2174,7 +2171,6 @@ with tab5:
                     show_comp.style
                         .apply(_color_match_row, axis=1)
                         .map(_color_verdict_cell, subset=["Verdict"]),
-                    use_container_width=True,
                     hide_index=True,
                     column_config={
                         "Profile": st.column_config.LinkColumn("Profile", display_text="🔗 CBB Ref"),
@@ -2366,7 +2362,6 @@ with tab6:
 
             st.dataframe(
                 display_pool.style.apply(_color_pool_row, axis=1),
-                use_container_width=True,
                 hide_index=True,
                 height=420,
             )
@@ -2417,8 +2412,7 @@ with tab6:
                                     "full_name":"Player","position":"Pos","season":"Season",
                                     "from_school":"From","from_tier_label":"From Tier",
                                     "to_school":"To","to_tier_label":"To Tier",
-                                }),
-                                use_container_width=True, hide_index=True, height=300,
+                                }), hide_index=True, height=300,
                             )
                 except Exception:
                     pass
@@ -2638,8 +2632,7 @@ with tab6:
                             "transfer_verdict":"Verdict",
                         }
                         st.dataframe(
-                            results[[c for c in p1_cols if c in results.columns]].rename(columns=p1_cols),
-                            use_container_width=True, hide_index=True,
+                            results[[c for c in p1_cols if c in results.columns]].rename(columns=p1_cols), hide_index=True,
                             column_config={
                                 "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
                                 "Match": st.column_config.TextColumn("Match", width="small"),
@@ -2842,8 +2835,7 @@ with tab6:
                     }
                     st.dataframe(
                         ec_results[[c for c in ec_display_cols if c in ec_results.columns]]
-                        .rename(columns=ec_display_cols),
-                        use_container_width=True, hide_index=True,
+                        .rename(columns=ec_display_cols), hide_index=True,
                         column_config={
                             "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
                         },
