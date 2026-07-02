@@ -302,22 +302,23 @@ base AS (
     JOIN teams t_from ON tr.from_team_id = t_from.team_id
     JOIN teams t_to   ON tr.to_team_id   = t_to.team_id
 
-    -- LEFT JOIN on ps_before: JUCO/D2/D3 transfers have no pre-D1 CBB Reference data.
-    -- For D1 players, find the most recent season at the from-school that has a BPM value.
-    -- We match by school NAME (not team_id) because a school can have multiple team rows
-    -- (one per season) in the teams table due to the per-season data model.
+    -- LEFT JOIN on ps_before: find the player's most recent D1 BPM before this transfer
+    -- from ANY D1 school (not just the from-school). This handles players who had a brief
+    -- stop at their from-school with no stats (e.g. UTSA→PFW with 0 games→Elon uses
+    -- UTSA BPM as the "before" for the PFW→Elon transfer, which is the correct signal).
     LEFT JOIN player_seasons ps_before
-        ON tr.player_id = ps_before.player_id
-        AND ps_before.team_id IN (SELECT team_id FROM teams WHERE name = t_from.name)
-        AND ps_before.season = (
-            -- Latest pre-transfer season with real BPM at the from-school
-            SELECT MAX(ps2.season)
+        ON tr.player_id       = ps_before.player_id
+        AND ps_before.team_id = (
+            SELECT ps2.team_id
             FROM player_seasons ps2
             JOIN teams t2 ON ps2.team_id = t2.team_id
+            JOIN conferences c2 ON t2.conference_id = c2.conference_id
             WHERE ps2.player_id = tr.player_id
-              AND t2.name       = t_from.name
-              AND ps2.season    < tr.season    -- must be before the transfer season
-              AND ps2.bpm IS NOT NULL          -- must have real stats (not a placeholder row)
+              AND ps2.season    < tr.season
+              AND ps2.bpm IS NOT NULL
+              AND c2.tier NOT IN ('sub_d1','international')
+            ORDER BY ps2.season DESC
+            LIMIT 1
         )
 
     -- INNER JOIN on ps_after: a transfer cannot be scored without D1 destination stats
@@ -329,14 +330,10 @@ base AS (
     JOIN conferences c_from ON t_from.conference_id = c_from.conference_id
     JOIN conferences c_to   ON t_to.conference_id   = c_to.conference_id
 
-    -- LEFT JOIN on origin team_seasons to get adj_efficiency for competition adjustment.
-    -- Matches by school name + pre-transfer season to get the correct season's team record.
-    LEFT JOIN teams t_from_hist
-        ON t_from_hist.name   = t_from.name
-        AND t_from_hist.season = ps_before.season
+    -- Competition adjustment from the school where ps_before stats actually come from
+    -- (ps_before.team_id is already the exact season record, so join is direct)
     LEFT JOIN team_seasons ts_from
-        ON ts_from.team_id = t_from_hist.team_id
-        AND ts_from.season = ps_before.season
+        ON ts_from.team_id = ps_before.team_id
 
     -- Level 1 peer baseline: specific route + recruit tier, ≥ 3 NIL-era samples.
     LEFT JOIN tier_pair_expectations tpe

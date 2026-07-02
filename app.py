@@ -967,10 +967,10 @@ with tabL:
 
         <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px; padding:18px 20px;">
           <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            ~49% of Transfers Are Scored
+            63% of Transfers Are Scored
           </div>
           <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            4,073 of 8,252 portal entries have a score. To be scored, a player needs BPM data
+            5,160 of 8,252 portal entries have a score. To be scored, a player needs BPM data
             at both their origin school and their destination — meaning meaningful minutes at both stops.
             Players who transferred mid-development, went pro, or sat out a year are invisible here.
           </p>
