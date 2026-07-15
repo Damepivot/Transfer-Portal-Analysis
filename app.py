@@ -1,17 +1,17 @@
 """
-NCAA Transfer Portal Analytics — Streamlit Dashboard
+NCAA Transfer Portal Analytics: Streamlit Dashboard
 Run: streamlit run app.py
 
 Nine tabs:
-  About            — methodology, Skill Index glossary
-  Major Takeaways  — broadcast-style summary: route report, NIL era split, top transfers
-  Scope & Limits   — Skill Index/BPM caveats, data coverage gaps, what the model does and doesn't measure
-  Transfer Overview — season KPIs, tier-to-tier flow heatmap, volume by season
-  Individual Scores — player-level Skill Index verdicts, stat table
-  League Trends     — transfer premium by tier, season-over-season success rates
-  Recruit Profiles  — stat floors by destination tier, origin, and position
-  Player Fit Finder — input a player profile → comparable portal transfers with projections
-  Coach Search      — input program criteria → Transfer Pool + Expected Contribution tool
+  About: methodology, Skill Index glossary
+  Major Takeaways: broadcast-style summary, route report, NIL era split, top transfers
+  Scope & Limits: Skill Index/BPM caveats, data coverage gaps, what the model does and doesn't measure
+  Transfer Overview: season KPIs, tier-to-tier flow heatmap, volume by season
+  Individual Scores: player-level Skill Index verdicts, stat table
+  League Trends: transfer premium by tier, season-over-season success rates
+  Recruit Profiles: stat floors by destination tier, origin, and position
+  Player Fit Finder: input a player profile, get comparable portal transfers with projections
+  Coach Search: input program criteria, get Transfer Pool + Expected Contribution tool
 
 Data: PostgreSQL (local). DB connection via environment variables in db.py.
 Sidebar filters (season, position, destination tier) apply to Transfer Overview,
@@ -74,7 +74,7 @@ st.html("""
     margin-top: 3px;
   }
 
-  /* ── Metric cards — orange left border ── */
+  /* ── Metric cards - orange left border ── */
   [data-testid="metric-container"] {
     background: #1A1A1A;
     border-left: 3px solid #FF6B00;
@@ -94,7 +94,7 @@ st.html("""
     font-weight: 700;
   }
 
-  /* ── Tabs — bolder, larger, orange active glow ── */
+  /* ── Tabs - bolder, larger, orange active glow ── */
   .stTabs [data-baseweb="tab-list"] {
     background: #1A1A1A;
     border-radius: 4px;
@@ -170,7 +170,7 @@ st.html("""
 """)
 
 # D1 basketball splits into four competitive tiers. sub_d1 (JUCO/D2/D3) and
-# international are tracked as origin only — BPM data doesn't exist for
+# international are tracked as origin only: BPM data doesn't exist for
 # non-D1 destinations, so those routes can't be scored.
 TIER_ORDER = ["high_major", "high_mid_major", "mid_major", "low_major"]
 ALL_TIERS  = TIER_ORDER + ["sub_d1", "international"]  # origin-side only
@@ -194,7 +194,7 @@ TIER_COLORS = {
 }
 
 # Chart colors for verdict labels (bright, for plotly rendering).
-# Table cell backgrounds are intentionally different — see _color_verdict_cell().
+# Table cell backgrounds are intentionally different: see _color_verdict_cell().
 VERDICT_COLORS = {
     "Above Projection":       "#FF6B00",
     "High-Impact Acquisition":"#FF8C38",
@@ -210,10 +210,10 @@ MIN_PEER_SIZE = 5    # transfer premium requires at least 5 peers on the same ro
 
 # ── Player Fit Finder search tolerances ──────────────────────────────────────
 # These windows are wide enough to return enough comps but tight enough to stay positionally relevant.
-HEIGHT_TOL = 2     # ±2 inches — roughly one position tier of natural height variance
-WEIGHT_TOL = 15    # ±15 lbs — captures in-season body composition range
-BPM_TOL    = 2.0   # ±2.0 BPM — same production tier; fallback search expands to ±3.0
-BIRTH_TOL  = 2     # ±2 years — keeps comparisons within the same recruiting generation
+HEIGHT_TOL = 2     # ±2 inches: roughly one position tier of natural height variance
+WEIGHT_TOL = 15    # ±15 lbs: captures in-season body composition range
+BPM_TOL    = 2.0   # ±2.0 BPM: same production tier; fallback search expands to ±3.0
+BIRTH_TOL  = 2     # ±2 years: keeps comparisons within the same recruiting generation
 # Skill Index is a z-score blend with SD ≈ 0.71 (vs BPM's raw SD ≈ 4.22), so its
 # tolerance window is scaled down proportionally to land on the same "how similar
 # a performance band" bar as BPM_TOL did: 2.0/4.22 ≈ 0.47 SD of BPM → 0.47 × 0.71 ≈ 0.35.
@@ -225,7 +225,7 @@ SKILL_INDEX_TOL = 0.35   # fallback search expands to ×1.5
 ROUTE_WORKS_PCT  = 55
 ROUTE_VIABLE_PCT = 38
 
-# Position expansion: G/F and F/C are hybrid positions — include them when either base is selected
+# Position expansion: G/F and F/C are hybrid positions: include them when either base is selected
 POS_EXPAND = {
     "G": ["G", "G/F"],
     "F": ["G/F", "F", "F/C"],
@@ -249,7 +249,7 @@ def expand_positions(selected: list) -> list:
 VERDICT_ORDER = ["Exceeded Expectations", "High Value", "Solid Addition", "Neutral", "Didn't Fit"]
 VERDICT_DISPLAY_ORDER = ["Above Projection", "High-Impact Acquisition", "Positive Acquisition", "Met Projections", "Below Projection"]
 
-# Front-office display labels — maps internal DB values to scouting-report language.
+# Front-office display labels: maps internal DB values to scouting-report language.
 # SQL queries and DB storage keep the original strings; only UI display changes.
 VERDICT_DISPLAY = {
     "Exceeded Expectations": "Above Projection",
@@ -265,7 +265,7 @@ def fmt_verdict(v: str) -> str:
 
 # Position-relative physical profile buckets for Coach Search match scoring.
 # "Short/Average/Tall" and "Lean/Average/Heavy" are relative to what's normal at each position,
-# not absolute measurements — a 6'4" C is Short; a 6'4" G is Tall.
+# not absolute measurements: a 6'4" C is Short; a 6'4" G is Tall.
 HEIGHT_BUCKETS = {
     "G":   {"Short": (0, 73),  "Average": (74, 76), "Tall": (77, 999)},
     "G/F": {"Short": (0, 75),  "Average": (76, 78), "Tall": (79, 999)},
@@ -324,7 +324,7 @@ st.sidebar.html("""
     letter-spacing: 0.1em;
     color: #FF6B00;
     line-height: 1;
-  ">🏀 PIVOT HOOPS</div>
+  ">PIVOT HOOPS</div>
   <div style="
     font-size: 0.7rem;
     letter-spacing: 0.14em;
@@ -386,20 +386,20 @@ def build_where(*filters):
 
 # ── Page tabs ─────────────────────────────────────────────────────────────────
 tab0, tabX, tabL, tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🏠 About",
-    "📣 Major Takeaways",
-    "⚠️ Scope & Limits",
-    "📊 Transfer Overview",
-    "👤 Individual Scores",
-    "📈 League Trends",
-    "🎯 Recruit Profiles",
-    "🔍 Player Fit Finder",
-    "🏀 Coach Search",
+    "About",
+    "Major Takeaways",
+    "Scope & Limits",
+    "Transfer Overview",
+    "Individual Scores",
+    "League Trends",
+    "Recruit Profiles",
+    "Player Fit Finder",
+    "Coach Search",
 ])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 0 — About / Intro
+# TAB 0: About / Intro
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab0:
     st.html("""
@@ -407,7 +407,7 @@ with tab0:
 
       <div style="display:flex; align-items:center; gap:16px; margin-bottom:28px;">
         <div style="font-family:'Bebas Neue','Rajdhani',sans-serif; font-size:3.2rem;
-                    color:#FF6B00; letter-spacing:0.06em; line-height:1;">🏀 PIVOT HOOPS</div>
+                    color:#FF6B00; letter-spacing:0.06em; line-height:1;">PIVOT HOOPS</div>
         <div style="border-left:2px solid #FF6B00; padding-left:16px;">
           <div style="color:#FFFFFF; font-size:1.1rem; font-weight:700; letter-spacing:0.04em;">
             Transfer Portal Intelligence</div>
@@ -419,8 +419,8 @@ with tab0:
       <p style="color:#CCCCCC; font-size:1.0rem; line-height:1.7; max-width:720px; margin-bottom:28px;">
         Pivot Hoops is a data platform built for <strong style="color:#FF6B00;">coaches</strong> and
         <strong style="color:#FF6B00;">players</strong> navigating the transfer portal.
-        We track every D1 portal movement — over <strong>8,000 transfers</strong> across
-        <strong>350 schools</strong> — and score each one using real Box Plus/Minus, usage rate,
+        We track every D1 portal movement (over <strong>8,000 transfers</strong> across
+        <strong>350 schools</strong>) and score each one using real Box Plus/Minus, usage rate,
         and shooting efficiency data from College Basketball Reference. No projections. No
         estimates. Real stats only.
       </p>
@@ -432,7 +432,7 @@ with tab0:
                       text-transform:uppercase; margin-bottom:10px;">For Coaches</div>
           <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
             Use the <strong>Coach Search</strong> tab to find your next portal target.
-            Set a minimum Skill Index — the production floor you need — and
+            Set a minimum Skill Index (the production floor you need) and
             see every player who historically delivered that at your tier.
             The <strong>Transfer Pool</strong> shows all 8,000+ portal movements with
             🟢 <em>In Your Range</em> flags so you know who's realistically attainable.
@@ -445,7 +445,7 @@ with tab0:
           <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
             Use the <strong>Player Fit Finder</strong> tab. Enter your position, current tier,
             BPM, usage, shooting efficiency, and physical profile. We'll show you which tiers and
-            <em>specific programs</em> players like you have thrived at after transferring —
+            <em>specific programs</em> players like you have thrived at after transferring,
             not just tier cards, but actual school names ranked by success rate.
           </p>
         </div>
@@ -454,70 +454,69 @@ with tab0:
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                   text-transform:uppercase; margin-bottom:12px;">Understanding the Metrics</div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px;">
-        <div style="background:#1A1A1A; border-radius:4px; padding:14px 16px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.9rem; margin-bottom:6px;">Skill Index</div>
-          <div style="color:#888; font-size:0.82rem; line-height:1.5;">
-            The metric this whole site is built on. A blend of BPM (50%), usage rate (25%), and
-            true-shooting% (25%), each measured against the full population of transfers, so a
-            reduced-role player who's still efficient doesn't grade out the same as one who just
-            wasn't productive. Computed both before and after the transfer on the same scale, so
-            "did this move work" is a direct, single-number comparison.
-          </div>
+      <div style="background:#161616; border-left:4px solid #FF6B00; border-radius:4px; padding:22px 24px; margin-bottom:10px;">
+        <div style="color:#FFFFFF; font-weight:700; font-size:1.2rem; margin-bottom:8px;">Skill Index</div>
+        <div style="color:#CCCCCC; font-size:0.92rem; line-height:1.6; max-width:640px;">
+          The metric this whole site is built on. A blend of BPM (50%), usage rate (25%), and
+          true-shooting% (25%), each measured against the full population of transfers, so a
+          reduced-role player who's still efficient doesn't grade out the same as one who just
+          wasn't productive. Computed both before and after the transfer on the same scale, so
+          "did this move work" is a direct, single-number comparison.
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:14px 16px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.9rem; margin-bottom:6px;">Transfer Premium</div>
-          <div style="color:#888; font-size:0.82rem; line-height:1.5;">
-            How much a player beat (or missed) the expected skill index for their type of move,
-            versus similar transfers historically. Positive = exceeded what similar transfers
-            delivered. Negative = underperformed relative to comparable portal peers.
-          </div>
+      </div>
+      <div style="border-left:1px solid #333; padding:8px 0 8px 20px; margin-bottom:28px;">
+        <div style="color:#888; font-weight:700; font-size:0.78rem; letter-spacing:0.05em;
+                    text-transform:uppercase; margin-bottom:4px;">Also on this site: Transfer Premium</div>
+        <div style="color:#999; font-size:0.82rem; line-height:1.55; max-width:600px;">
+          How much a player beat (or missed) the expected skill index for their type of move,
+          versus similar transfers historically. Positive means they exceeded what similar
+          transfers delivered; negative means they underperformed relative to comparable portal peers.
         </div>
       </div>
 
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
-                  text-transform:uppercase; margin-bottom:12px;">Tab Guide</div>
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">📊</span>
+                  text-transform:uppercase; margin-bottom:4px;">Tab Guide</div>
+      <div style="border-top:1px solid #262626;">
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">01</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Transfer Overview</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">Volume by season, tier flow heatmap, transfer trends at a glance.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">Transfer Overview</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">Volume by season, tier flow heatmap, transfer trends at a glance.</div>
           </div>
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">👤</span>
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">02</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Individual Scores</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">Search any player or school, filter by verdict, and compare Skill Index before/after.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">Individual Scores</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">Search any player or school, filter by verdict, and compare Skill Index before/after.</div>
           </div>
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">📈</span>
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">03</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">League Trends</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">Success rates by tier route, transfer premium by destination, physical profiles.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">League Trends</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">Success rates by tier route, transfer premium by destination, physical profiles.</div>
           </div>
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">🎯</span>
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">04</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Recruit Profiles</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">What the average successful recruit looks like for each tier-to-tier move.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">Recruit Profiles</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">What the average successful recruit looks like for each tier-to-tier move.</div>
           </div>
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">🔍</span>
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">05</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Player Fit Finder</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">Players: enter your stats and see exactly which schools have had success with your profile.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">Player Fit Finder</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">Players: enter your stats and see exactly which schools have had success with your profile.</div>
           </div>
         </div>
-        <div style="background:#1A1A1A; border-radius:4px; padding:12px 16px; display:flex; gap:10px;">
-          <span style="font-size:1.1rem;">🏀</span>
+        <div style="display:flex; gap:16px; padding:12px 2px; border-bottom:1px solid #262626;">
+          <span style="font-family:'Rajdhani',sans-serif; color:#FF6B00; font-weight:700; font-size:0.8rem; width:20px; flex-shrink:0; padding-top:1px;">06</span>
           <div>
-            <div style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Coach Search</div>
-            <div style="color:#666; font-size:0.78rem; margin-top:3px;">Coaches: find every portal player above the Skill Index floor you need, ranked by historical fit at your tier.</div>
+            <div style="color:#FFFFFF; font-weight:700; font-size:0.86rem;">Coach Search</div>
+            <div style="color:#777; font-size:0.78rem; margin-top:2px;">Coaches: find every portal player above the Skill Index floor you need, ranked by historical fit at your tier.</div>
           </div>
         </div>
       </div>
@@ -527,10 +526,10 @@ with tab0:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB X — Major Takeaways
+# TAB X: Major Takeaways
 # ═══════════════════════════════════════════════════════════════════════════════
 with tabX:
-    st.title("📣 Major Takeaways")
+    st.title("Major Takeaways")
     st.caption("Six years of portal data. Here's what it says.")
 
     try:
@@ -554,7 +553,7 @@ with tabX:
         h2.metric("Positive Outcome Rate", f"{hero['hv_pct'][0]}%")
         h3.metric("Avg Skill Index After Transfer", f"{hero['avg_idx'][0]:+.2f}")
         h4.metric("Best Transfer Ever", f"+{hero['best_idx'][0]:.2f} Skill Index")
-        h4.caption(f"🐐 {hero['best_player'][0]}")
+        h4.caption(hero['best_player'][0])
 
         st.markdown("---")
 
@@ -578,7 +577,7 @@ with tabX:
             axis=1,
         )
         route_df["verdict"]    = route_df["hv_pct"].apply(
-            lambda p: "✅ Works" if p >= ROUTE_WORKS_PCT else ("⚠️ Mixed" if p >= ROUTE_VIABLE_PCT else "❌ Avoid")
+            lambda p: "🟢 Works" if p >= ROUTE_WORKS_PCT else ("🟡 Mixed" if p >= ROUTE_VIABLE_PCT else "🔴 Avoid")
         )
         route_df["direction"]  = route_df.apply(
             lambda r: "⬆️ Moving Up" if TIER_RANK.get(r["to_tier"],4) < TIER_RANK.get(r["from_tier"],4)
@@ -588,10 +587,10 @@ with tabX:
         col_works, col_avoids = st.columns(2)
         with col_works:
             top = route_df[route_df["hv_pct"] >= 50].head(6)
-            st.markdown("**🏆 Routes That Work (50%+ High Value)**")
+            st.markdown("**Routes That Work (50%+ High Value)**")
             for _, r in top.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% Positive · "
+                    f"- **{r['route']}**: {r['hv_pct']:.0f}% Positive · "
                     f"avg +{r['avg_idx']:.2f} Skill Index · n={int(r['n'])}"
                 )
         with col_avoids:
@@ -599,7 +598,7 @@ with tabX:
             st.markdown("**Routes That Miss (under 20% Positive Outcome)**")
             for _, r in bot.iterrows():
                 st.markdown(
-                    f"- **{r['route']}** — {r['hv_pct']:.0f}% Positive · "
+                    f"- **{r['route']}**: {r['hv_pct']:.0f}% Positive · "
                     f"avg {r['avg_idx']:+.2f} Skill Index · n={int(r['n'])}"
                 )
 
@@ -627,8 +626,8 @@ with tabX:
         col_prod, col_dev = st.columns(2)
 
         with col_prod:
-            st.subheader("🏫 Schools That Produce")
-            st.caption("Programs players left. Ranked by median Skill Index at their next school — more resistant to one outlier season than the average.")
+            st.subheader("Schools That Produce")
+            st.caption("Programs players left. Ranked by median Skill Index at their next school, which is more resistant to one outlier season than the average.")
             origin_df = query("""
                 SELECT from_school, from_tier, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY skill_index_after)::numeric,2) as median_idx,
@@ -673,13 +672,13 @@ with tabX:
                 st.caption("Players left these programs and struggled at their next stop.")
                 for _, r in worst_origin_df.iterrows():
                     st.markdown(
-                        f"- **{r['from_school']}** — {float(r['median_idx']):+.2f} median Skill Index · "
+                        f"- **{r['from_school']}**: {float(r['median_idx']):+.2f} median Skill Index · "
                         f"{r['hv_pct']}% Positive · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
         with col_dev:
-            st.subheader("🧲 Schools That Develop")
-            st.caption("Programs where transfers land and produce. Ranked by median Skill Index — one standout season doesn't carry the whole school.")
+            st.subheader("Schools That Develop")
+            st.caption("Programs where transfers land and produce. Ranked by median Skill Index, since one standout season doesn't carry the whole school.")
             dest_df = query("""
                 SELECT to_school, to_tier, COUNT(*) as n,
                     ROUND(PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY skill_index_after)::numeric,2) as median_idx,
@@ -721,7 +720,7 @@ with tabX:
                 st.caption("Transfers go here and underperform. Repeatedly.")
                 for _, r in worst_dest_df.iterrows():
                     st.markdown(
-                        f"- **{r['to_school']}** — {float(r['median_idx']):+.2f} median Skill Index · "
+                        f"- **{r['to_school']}**: {float(r['median_idx']):+.2f} median Skill Index · "
                         f"{r['hv_pct']}% Positive · {r['fail_pct']}% Below Proj. · n={int(r['n'])}"
                     )
 
@@ -744,8 +743,7 @@ with tabX:
         p1, p2, p3 = st.columns(3)
         for col, (_, row) in zip([p1, p2, p3], pos_df.iterrows()):
             with col:
-                icon = {"G": "🏃", "F": "💪", "C": "🏆"}.get(row["position"], "")
-                st.metric(f"{icon} {row['position']} — Avg Skill Index", f"{row['avg_idx']:+.2f}")
+                st.metric(f"{row['position']}: Avg Skill Index", f"{row['avg_idx']:+.2f}")
                 st.caption(
                     f"{int(row['n'])} transfers · {row['hv_pct']}% Positive · "
                     f"{row['fail_pct']}% Below Proj."
@@ -754,7 +752,7 @@ with tabX:
         st.markdown("---")
 
         # ── Section 4: NIL Era Effect ──────────────────────────────────────────
-        st.subheader("📅 NIL Changed Everything. Did It Help?")
+        st.subheader("NIL Changed Everything. Did It Help?")
         st.caption(
             "NIL took effect June 2021. Portal volume tripled by 2023. "
             "Player outcomes are a different question."
@@ -851,7 +849,7 @@ with tabX:
         st.markdown("---")
 
         # ── Section 5: Greatest Transfers Ever ────────────────────────────────
-        st.subheader("🐐 Best Individual Transfers")
+        st.subheader("Best Individual Transfers")
         st.caption("Sorted by Skill Index at their new school. Top 5 listed, full top-20 in the table below.")
 
         goat_df = query("""
@@ -907,11 +905,12 @@ with tabX:
                 )
 
     except Exception as e:
-        st.error(f"Takeaways error: {e}")
+        st.error("Couldn't load the takeaways data.")
+        st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB L — Scope & Limits
+# TAB L: Scope & Limits
 # ═══════════════════════════════════════════════════════════════════════════════
 with tabL:
     st.html("""
@@ -921,10 +920,10 @@ with tabL:
         <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                     text-transform:uppercase; margin-bottom:8px;">What This Is</div>
         <p style="color:#CCCCCC; font-size:1.0rem; line-height:1.7; max-width:720px; margin:0;">
-          PivotHoops scores every transfer with <b>skill index</b> — a blend of Box Plus/Minus (50%),
+          PivotHoops scores every transfer with <b>skill index</b>, a blend of Box Plus/Minus (50%),
           usage rate (25%), and true-shooting% (25%) from College Basketball Reference. BPM alone is
           the best publicly available single-number impact metric, but using it by itself rewards
-          high-usage volume scorers over efficient role players — skill index corrects for that.
+          high-usage volume scorers over efficient role players. Skill index corrects for that.
           It still inherits BPM's real limits. Read this before drawing hard conclusions from any
           number on this dashboard.
         </p>
@@ -936,93 +935,53 @@ with tabL:
           A high Skill Index at a new school does not mean the transfer was the right call
         </div>
         <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-          This dashboard measures how well a player performed at their new school — not whether
+          This dashboard measures how well a player performed at their new school, not whether
           the move was the best decision available to them. A player who posted a +1.5 Skill Index
           at a mid-major might have posted +2.0 if they stayed put or chose a different program.
           "Transfer worked" here means they contributed; it says nothing about opportunity cost.
           <br><br>
           To get closer to that question, look at <b>skill index change</b> (how much they improved or
           declined vs. their previous season) and <b>transfer premium</b> (skill index after vs. what
-          similar players typically produce on that route). Those metrics measure relative improvement
-          — not just output.
+          similar players typically produce on that route). Those metrics measure relative improvement,
+          not just output.
         </p>
       </div>
 
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
                   text-transform:uppercase; margin-bottom:12px;">Known Limitations</div>
 
-      <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px;">
-
-        <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            BPM Skews High Major
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            High major teams play stronger schedules, which strength-of-schedule adjustments help but don't fully fix.
-            Non-conference blowouts against weak opponents inflate individual BPM.
-            A Big 12 player at +4.0 and a Sun Belt player at +4.0 are not the same.
-            Cross-tier BPM comparisons should be treated as directional, not precise.
-          </p>
+      <div style="background:#161616; border-left:4px solid #FF6B00; border-radius:4px; padding:20px 22px; margin-bottom:12px;">
+        <div style="color:#FFFFFF; font-weight:700; font-size:1.05rem; margin-bottom:8px;">
+          63% of Transfers Are Scored
         </div>
+        <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0; max-width:660px;">
+          5,160 of 8,252 portal entries have a score. To be scored, a player needs BPM data
+          at both their origin school and their destination, meaning meaningful minutes at both stops.
+          Players who transferred mid-development, went pro, or sat out a year are invisible here.
+        </p>
+      </div>
 
-        <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            63% of Transfers Are Scored
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            5,160 of 8,252 portal entries have a score. To be scored, a player needs BPM data
-            at both their origin school and their destination — meaning meaningful minutes at both stops.
-            Players who transferred mid-development, went pro, or sat out a year are invisible here.
-          </p>
+      <div style="margin-bottom:28px;">
+        <div style="border-left:3px solid #FF6B00; padding:9px 16px; margin-bottom:1px;">
+          <span style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">BPM Skews High Major.</span>
+          <span style="color:#999; font-size:0.83rem; line-height:1.55;"> High major teams play stronger schedules, which strength-of-schedule adjustments help but don't fully fix. Non-conference blowouts against weak opponents inflate individual BPM. A Big 12 player at +4.0 and a Sun Belt player at +4.0 are not the same. Cross-tier BPM comparisons should be treated as directional, not precise.</span>
         </div>
-
-        <div style="background:#1A1A1A; border-left:3px solid #FF8C38; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            High Major Data Is More Complete
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            CBB Reference play-by-play coverage is strongest for Power 5 programs.
-            Low major and mid-major box scores are spottier — missing games affect BPM accuracy.
-            High major verdicts are the most reliable. Low major verdicts should be read with more skepticism.
-          </p>
+        <div style="border-left:3px solid #FF8C38; padding:9px 16px; margin-bottom:1px;">
+          <span style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">High Major Data Is More Complete.</span>
+          <span style="color:#999; font-size:0.83rem; line-height:1.55;"> CBB Reference play-by-play coverage is strongest for Power 5 programs. Low major and mid-major box scores are spottier, and missing games affect BPM accuracy. High major verdicts are the most reliable; low major verdicts should be read with more skepticism.</span>
         </div>
-
-        <div style="background:#1A1A1A; border-left:3px solid #FF8C38; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            Small Sample Floors
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            Players with fewer than 12 games get no BPM score.
-            Transfer premium peer groups require at least 5 comparable players —
-            thin conferences can produce noisy baselines.
-            Single-season results in small samples are directional signals, not definitive grades.
-          </p>
+        <div style="border-left:3px solid #FF8C38; padding:9px 16px; margin-bottom:1px;">
+          <span style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Small Sample Floors.</span>
+          <span style="color:#999; font-size:0.83rem; line-height:1.55;"> Players with fewer than 12 games get no BPM score. Transfer premium peer groups require at least 5 comparable players, and thin conferences can produce noisy baselines. Single-season results in small samples are directional signals, not definitive grades.</span>
         </div>
-
-        <div style="background:#1A1A1A; border-left:3px solid #555555; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            International Players Are Mostly Unscored
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            Pre-D1 stats for international players are unavailable — the primary overseas data source
-            blocked automated scraping. International transfers can only be scored after they log
-            D1 minutes. Their pre-college performance is not reflected anywhere in this model.
-          </p>
+        <div style="border-left:3px solid #555555; padding:9px 16px; margin-bottom:1px;">
+          <span style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">International Players Are Mostly Unscored.</span>
+          <span style="color:#999; font-size:0.83rem; line-height:1.55;"> Pre-D1 stats for international players are unavailable because the primary overseas data source blocked automated scraping. International transfers can only be scored after they log D1 minutes. Their pre-college performance is not reflected anywhere in this model.</span>
         </div>
-
-        <div style="background:#1A1A1A; border-left:3px solid #555555; border-radius:4px; padding:18px 20px;">
-          <div style="color:#FFFFFF; font-weight:700; font-size:0.95rem; margin-bottom:8px;">
-            Verdict Thresholds Are Flat
-          </div>
-          <p style="color:#CCCCCC; font-size:0.88rem; line-height:1.6; margin:0;">
-            High Value requires a skill index more than 1 standard deviation above the population
-            average, regardless of conference. The bar recalculates automatically against the full
-            dataset as more transfers get scored — but it's still one universal bar, not adjusted
-            per tier, so it slightly undervalues success in lower-resource environments where that
-            bar is genuinely harder to clear. Use verdicts as a starting point, not a final answer.
-          </p>
+        <div style="border-left:3px solid #555555; padding:9px 16px;">
+          <span style="color:#FFFFFF; font-weight:700; font-size:0.85rem;">Verdict Thresholds Are Flat.</span>
+          <span style="color:#999; font-size:0.83rem; line-height:1.55;"> High Value requires a skill index more than 1 standard deviation above the population average, regardless of conference. The bar recalculates automatically against the full dataset as more transfers get scored, but it's still one universal bar, not adjusted per tier, so it slightly undervalues success in lower-resource environments where that bar is genuinely harder to clear. Use verdicts as a starting point, not a final answer.</span>
         </div>
-
       </div>
 
       <div style="color:#FF6B00; font-weight:700; font-size:0.9rem; letter-spacing:0.08em;
@@ -1031,22 +990,22 @@ with tabL:
       <div style="background:#1A1A1A; border-left:3px solid #FF6B00; border-radius:4px;
                   padding:20px 24px; display:grid; grid-template-columns:1fr 1fr; gap:12px 32px;">
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;8,252 transfers tracked across 350 of 364 D1 schools
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; 8,252 transfers tracked across 350 of 364 D1 schools
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;2020-21 through 2025-26 — six full portal-era seasons
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; 2020-21 through 2025-26: six full portal-era seasons
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;Deduplicated with a database-level UNIQUE constraint
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; Deduplicated with a database-level UNIQUE constraint
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;BPM capped at ±15 to limit outlier contamination
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; BPM capped at ±15 to limit outlier contamination
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;Peer baselines account for tier and recruiting composite
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; Peer baselines account for tier and recruiting composite
         </div>
         <div style="color:#CCCCCC; font-size:0.88rem; line-height:1.6;">
-          ✅ &nbsp;Skill Index z-scores each component so BPM, usage, and efficiency are on one comparable scale
+          <span style="color:#FF6B00; font-weight:700;">&#10003;</span>&nbsp; Skill Index z-scores each component so BPM, usage, and efficiency are on one comparable scale
         </div>
       </div>
 
@@ -1055,10 +1014,10 @@ with tabL:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 1 — Transfer Overview
+# TAB 1: Transfer Overview
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab1:
-    st.title("📊 Transfer Overview")
+    st.title("Transfer Overview")
     st.caption("Men's basketball · 2021–2026 · Post-NIL era")
 
     sf, sp = season_filter()
@@ -1087,8 +1046,8 @@ with tab1:
         c1.metric("Total Transfers", f"{int(kpi['total_transfers'][0]):,}")
         c2.metric("Unique Players", f"{int(kpi['unique_players'][0]):,}")
         c3.metric("Destination Schools", f"{int(kpi['destination_teams'][0]):,}")
-        c4.metric("Avg USG% (post-transfer)", f"{kpi['avg_usg'][0] or '—'}%")
-        c5.metric("Avg Skill Index (post-transfer)", kpi['avg_skill_index'][0] or "—")
+        c4.metric("Avg USG% (post-transfer)", f"{kpi['avg_usg'][0] or 'N/A'}%")
+        c5.metric("Avg Skill Index (post-transfer)", kpi['avg_skill_index'][0] or "N/A")
     except Exception:
         st.info("Load data to see KPIs.")
 
@@ -1130,7 +1089,8 @@ with tab1:
             fig.update_layout(margin=dict(t=20, b=20))
             st.plotly_chart(fig)
         except Exception as e:
-            st.info(f"No data yet. ({e})")
+            st.info("Transfer flow data isn't available for this filter selection yet.")
+            st.caption(f"Technical detail: {e}")
 
     # Transfers per season bar
     with col_right:
@@ -1153,14 +1113,15 @@ with tab1:
             fig.update_layout(margin=dict(t=20, b=20), xaxis_title="", yaxis_title="# Transfers")
             st.plotly_chart(fig)
         except Exception as e:
-            st.info(f"No data yet. ({e})")
+            st.info("Season volume data isn't available for this filter selection yet.")
+            st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 2 — Individual Transfer Scores
+# TAB 2: Individual Transfer Scores
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab2:
-    st.title("📊 Player Scores & Verdicts")
+    st.title("Player Scores & Verdicts")
 
     # ── Search row ────────────────────────────────────────────────────────────
     search_col1, search_col2, search_col3 = st.columns([2, 1, 1])
@@ -1227,7 +1188,7 @@ with tab2:
                 | its["to_school"].str.lower().str.contains(q, na=False)
             ]
 
-        # Translate to display labels now, before anything reads transfer_verdict —
+        # Translate to display labels now, before anything reads transfer_verdict:
         # summary metrics and both charts below key off the display labels
         # (VERDICT_COLORS / VERDICT_DISPLAY_ORDER), not the raw DB values.
         its["transfer_verdict"] = its["transfer_verdict"].apply(fmt_verdict)
@@ -1246,7 +1207,7 @@ with tab2:
         col_l, col_r = st.columns([3, 2])
 
         with col_l:
-            st.subheader("Transfer Premium — Top & Bottom 15")
+            st.subheader("Transfer Premium: Top & Bottom 15")
             st.caption(
                 "**Transfer Premium** = player Skill Index minus the avg Skill Index of peers "
                 "who made the same tier jump with a similar recruiting composite. Positive = beat projection."
@@ -1308,7 +1269,7 @@ with tab2:
 | **Skill Index After** | The same blend at their *new* school. What they actually delivered. **This drives the Verdict** below. |
 | **Skill Index Δ** | How much they improved or declined, before vs. after, on the same scale. |
 | **Premium** | How much they beat the expected Skill Index for their type of transfer. Positive = exceeded expectations. |
-| **Verdict** | 🌟 Above Projection · ✅ High-Impact · 👍 Positive Acq. · ➖ Met Projections · ❌ Below Projection |
+| **Verdict** | Above Projection · High-Impact · Positive Acq. · Met Projections · Below Projection |
             """)
 
         its["season"] = its["season"].apply(fmt_season)
@@ -1334,11 +1295,11 @@ with tab2:
             hide_index=True,
         )
 
-        # ── Current portal class — committed but not yet played ────────────────
+        # ── Current portal class: committed but not yet played ────────────────
         # individual_transfer_scores requires a real outcome to score a transfer,
         # so the in-progress class (committed, no games at the new school yet)
         # never appears in the table above. current_portal_class surfaces those
-        # with Skill Index Before only — no verdict, no Skill Index After.
+        # with Skill Index Before only: no verdict, no Skill Index After.
         cpc_sql = """
             SELECT full_name, position, from_school, from_tier, to_school, to_tier,
                    season, skill_index_before
@@ -1356,10 +1317,10 @@ with tab2:
                     | cpc["to_school"].str.lower().str.contains(q, na=False)
                 ]
             cpc_season_label = fmt_season(cpc["season"].iloc[0]) if not cpc.empty else fmt_season(query("SELECT MAX(season) AS s FROM transfers")["s"].iloc[0])
-            with st.expander(f"🔄 Current Portal Class ({cpc_season_label}) — Committed, Not Yet Played", expanded=False):
+            with st.expander(f"Current Portal Class ({cpc_season_label}): Committed, Not Yet Played", expanded=False):
                 st.caption(
-                    "These players have committed to a new school but haven't played a game there yet — "
-                    "**Skill Index Before** only. No verdict or Skill Index After until they log real minutes."
+                    "These players have committed to a new school but haven't played a game there yet, so only "
+                    "**Skill Index Before** is available. No verdict or Skill Index After until they log real minutes."
                 )
                 cpc["from_tier_label"] = cpc["from_tier"].map(TIER_LABELS)
                 cpc["to_tier_label"]   = cpc["to_tier"].map(TIER_LABELS)
@@ -1375,15 +1336,16 @@ with tab2:
                 })
                 st.dataframe(cpc_show.sort_values("Skill Index Before", ascending=False), hide_index=True)
     except Exception as e:
-        st.info(f"No data yet — run ETL scripts first. ({e})")
+        st.info("No data yet. Run the ETL scripts to populate this view.")
+        st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 3 — League Trends
+# TAB 3: League Trends
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab3:
-    st.title("📈 League Transfer Trends")
-    st.markdown("How transfers perform at each tier level — success rates, transfer premium, and size patterns.")
+    st.title("League Transfer Trends")
+    st.markdown("How transfers perform at each tier level: success rates, transfer premium, and size patterns.")
 
     try:
         ltt_sql = "SELECT * FROM league_transfer_trends"
@@ -1521,14 +1483,15 @@ with tab3:
             st.info("Height/weight data populates after re-running scrape_on3.py and load_real_data.py.")
 
     except Exception as e:
-        st.info(f"No data yet — run ETL scripts first. ({e})")
+        st.info("No data yet. Run the ETL scripts to populate this view.")
+        st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 4 — Recruit Profiles
+# TAB 4: Recruit Profiles
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab4:
-    st.title("🎯 Recruit Profile Intel")
+    st.title("Recruit Profile Intel")
     st.markdown(
         "Two-part view: **who these players are** (raw pre-transfer profile, no weighting) "
         "and **what to expect at the new level** (post-transfer production + contextual value)."
@@ -1546,7 +1509,7 @@ with tab4:
 
         # ── Section 1: Player Profile (raw, no weighting) ──────────────────────
         st.markdown("---")
-        st.subheader("Player Profile — Who They Are Coming In")
+        st.subheader("Player Profile: Who They Are Coming In")
         st.caption("Raw pre-transfer stats of players who succeeded on this route (no tier weighting applied)")
 
         col_l, col_r = st.columns([2, 3])
@@ -1675,22 +1638,23 @@ with tab4:
         st.plotly_chart(fig_heat)
 
     except Exception as e:
-        st.info(f"No data yet — run ETL scripts first. ({e})")
+        st.info("No data yet. Run the ETL scripts to populate this view.")
+        st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 5 — Player Fit Finder
+# TAB 5: Player Fit Finder
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab5:
-    st.title("🔍 Player Fit Finder")
+    st.title("Player Fit Finder")
     st.markdown(
         "Enter your profile below. We'll predict which tiers and **specific conferences** "
-        "you'd likely thrive in — based on players with similar stats, size, and origin."
+        "you'd likely thrive in, based on players with similar stats, size, and origin."
     )
     st.info(
         "We compute your **Skill Index** from the three stats below (50% BPM, 25% usage, 25% "
         "true-shooting%), the same blend that scores every transfer on this site, and find "
-        "comparable players on that — not on BPM alone."
+        "comparable players on that, not on BPM alone."
     )
 
     st.markdown("### Your Profile")
@@ -1709,7 +1673,7 @@ with tab5:
         )
         fit_composite_on = st.checkbox(
             "I know my On3 Transfer Composite", value=False, key="fit_composite_on",
-            help="Turn on if you know your On3/247 portal rating — refines the model projection by recruit tier."
+            help="Turn on if you know your On3/247 portal rating. This refines the model projection by recruit tier."
         )
         if fit_composite_on:
             fit_composite = st.slider(
@@ -1752,7 +1716,7 @@ with tab5:
         _fit_pos_list = expand_positions(fit_positions if fit_positions else ["G", "F", "C"])
         _pos_ph = ",".join(["%s"] * len(_fit_pos_list))
         # HEIGHT_TOL, WEIGHT_TOL, SKILL_INDEX_TOL, BIRTH_TOL defined at module level above
-        # Main comparables query — includes conference info for league breakdown
+        # Main comparables query: includes conference info for league breakdown
         comp_sql = """
             SELECT
                 its.transfer_id,
@@ -1846,7 +1810,7 @@ with tab5:
                 st.warning("Not enough comparable transfers in the dataset yet. Try adjusting your stats or position.")
             else:
                 if relaxed:
-                    st.caption("No close physical matches found — showing position/Skill Index comparables only.")
+                    st.caption("No close physical matches found. Showing position/Skill Index comparables only.")
 
                 SUCCESS_VERDICTS = {"Exceeded Expectations", "High Value", "Solid Addition"}
 
@@ -1872,7 +1836,7 @@ with tab5:
                 tier_summary["avg_premium"]           = tier_summary["avg_premium"].round(2)
                 tier_summary["success_rate"]          = tier_summary["success_rate"].round(1)
 
-                # Model projection — recruit-specific if composite is known, else pooled fallback
+                # Model projection: recruit-specific if composite is known, else pooled fallback
                 if fit_recruit_tier:
                     proj_df = query(
                         """
@@ -1981,7 +1945,7 @@ with tab5:
                 conf_summary["to_tier_label"] = conf_summary["to_tier"].map(TIER_LABELS)
 
                 if conf_summary.empty:
-                    st.info("Not enough conference-level data — need at least 2 comparables per league. Try relaxing your stats or position filters.")
+                    st.info("Not enough conference-level data. Need at least 2 comparables per league. Try relaxing your stats or position filters.")
                 else:
                     # One expander per tier, sorted by avg_idx within tier
                     for tier_key in TIER_ORDER:
@@ -2045,9 +2009,9 @@ with tab5:
                                     display_conf.style.apply(color_conf_row, axis=1), hide_index=True,
                                 )
 
-                # ── SECTION C: Comparable Players — Strong / Athletic / Weak ──────
+                # ── SECTION C: Comparable Players: Strong / Athletic / Weak ──────
                 st.markdown("---")
-                st.subheader("👥 Players Like You — Who Are Your Comps?")
+                st.subheader("Players Like You: Who Are Your Comps?")
                 st.caption(
                     "**Strong Match** = similar Skill Index *and* similar height/weight for your position. "
                     "**Athletic Profile** = physical fit but different production level. "
@@ -2057,7 +2021,7 @@ with tab5:
 
                 comp["to_tier_label"] = comp["to_tier"].map(TIER_LABELS)
                 comp["height_str"] = comp["height_in"].apply(
-                    lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—"
+                    lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "N/A"
                 )
                 comp["cbb_url"] = comp["full_name"].apply(
                     lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ', '+')}"
@@ -2079,12 +2043,12 @@ with tab5:
                 comp["_stats_ok"] = comp.apply(_stats_ok, axis=1)
                 comp["_phys_ok"]  = comp.apply(_phys_ok, axis=1)
                 comp["match_type"] = comp.apply(
-                    lambda r: "💪 Strong Match" if r["_stats_ok"] and r["_phys_ok"]
-                    else ("🏃 Athletic Profile" if r["_phys_ok"]
-                    else "📊 Stat Match"), axis=1
+                    lambda r: "Strong Match" if r["_stats_ok"] and r["_phys_ok"]
+                    else ("Athletic Profile" if r["_phys_ok"]
+                    else "Stat Match"), axis=1
                 )
                 comp["_rank"] = comp["match_type"].map(
-                    {"💪 Strong Match": 0, "🏃 Athletic Profile": 1, "📊 Stat Match": 2}
+                    {"Strong Match": 0, "Athletic Profile": 1, "Stat Match": 2}
                 )
                 comp = comp.sort_values(["_rank", "skill_index_before"], ascending=[True, False])
 
@@ -2102,9 +2066,9 @@ with tab5:
 
                 # Summary counts
                 sm1, sm2, sm3 = st.columns(3)
-                sm1.metric("💪 Strong Match", int((comp["match_type"] == "💪 Strong Match").sum()))
-                sm2.metric("🏃 Athletic Profile", int((comp["match_type"] == "🏃 Athletic Profile").sum()))
-                sm3.metric("📊 Stat Match", int((comp["match_type"] == "📊 Stat Match").sum()))
+                sm1.metric("Strong Match", int((comp["match_type"] == "Strong Match").sum()))
+                sm2.metric("Athletic Profile", int((comp["match_type"] == "Athletic Profile").sum()))
+                sm3.metric("Stat Match", int((comp["match_type"] == "Stat Match").sum()))
 
                 display_cols = {
                     "match_type":         "Match",
@@ -2140,7 +2104,7 @@ with tab5:
                         .map(_color_verdict_cell, subset=["Verdict"]),
                     hide_index=True,
                     column_config={
-                        "Profile": st.column_config.LinkColumn("Profile", display_text="🔗 CBB Ref"),
+                        "Profile": st.column_config.LinkColumn("Profile", display_text="CBB Ref"),
                         "Match":   st.column_config.TextColumn("Match", width="medium"),
                     },
                     height=450,
@@ -2148,23 +2112,24 @@ with tab5:
 
 
         except Exception as e:
-            st.error(f"Query error: {e}")
+            st.error("Couldn't run the fit search.")
+            st.caption(f"Technical detail: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# TAB 6 — Coach Search
+# TAB 6: Coach Search
 # ═══════════════════════════════════════════════════════════════════════════════
 with tab6:
-    st.title("🏀 Coach Search — Portal Targeting")
+    st.title("Coach Search: Portal Targeting")
 
     coach_mode = st.radio(
         "Search mode",
-        ["🔍 By Pre-Transfer Profile", "🎯 By Expected Contribution"],
+        ["By Pre-Transfer Profile", "By Expected Contribution"],
         horizontal=True,
         key="coach_mode",
         help=(
             "Pre-Transfer Profile: find players based on what they did at their previous school. "
-            "Expected Contribution: tell us what you need — we show who historically delivered it."
+            "Expected Contribution: tell us what you need, and we'll show who historically delivered it."
         ),
     )
 
@@ -2202,12 +2167,12 @@ with tab6:
         )
 
     # ════════════════════════════════════════════════════════════════════════════
-    # TRANSFER POOL — Role-based player finder
+    # TRANSFER POOL: Role-based player finder
     # ════════════════════════════════════════════════════════════════════════════
     st.markdown("---")
-    st.markdown("### 🗂️ Transfer Pool — Who Can You Get?")
+    st.markdown("### Transfer Pool: Who Can You Get?")
     st.caption(
-        "Filter by minimum Skill Index — the blended rating (50% BPM, 25% usage, 25% true-shooting%) "
+        "Filter by minimum Skill Index, the blended rating (50% BPM, 25% usage, 25% true-shooting%) "
         "every transfer is scored on. Higher = more impact. "
         "**🟢 In Your Range** = this type of player has historically transferred to programs at your tier or below."
     )
@@ -2275,7 +2240,7 @@ with tab6:
             pool_df["to_tier_label"]   = pool_df["to_tier"].map(TIER_LABELS)
             pool_df["from_tier_label"] = pool_df["from_tier"].map(TIER_LABELS)
             pool_df["height_str"]      = pool_df["height_in"].apply(
-                lambda x: f"{int(x)//12}\'{int(x)%12}\"" if pd.notna(x) else "—"
+                lambda x: f"{int(x)//12}\'{int(x)%12}\"" if pd.notna(x) else "N/A"
             )
             pool_df["season"] = pool_df["season"].apply(fmt_season)
             if "transfer_verdict" in pool_df.columns:
@@ -2288,11 +2253,11 @@ with tab6:
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("In Pool",              len(pool_df))
             m2.metric("🟢 In Your Range",     len(in_range_df))
-            m3.metric("Avg BPM (prev school)", f"{pool_df['bpm_before'].mean():+.1f}" if pool_df["bpm_before"].notna().any() else "—")
+            m3.metric("Avg BPM (prev school)", f"{pool_df['bpm_before'].mean():+.1f}" if pool_df["bpm_before"].notna().any() else "N/A")
             m4.metric("Positive Outcome",      int(pool_df["transfer_verdict"].isin(sv).sum()))
 
             pool_df["ts_pct_str"] = pool_df["efficiency_before"].apply(
-                lambda x: f"{x*100:.1f}%" if pd.notna(x) else "—"
+                lambda x: f"{x*100:.1f}%" if pd.notna(x) else "N/A"
             )
             _pool_cols = [
                 "full_name", "position", "height_str", "weight_lbs",
@@ -2318,17 +2283,17 @@ with tab6:
                 "transfer_verdict": "Outcome",
             }
 
-            st.markdown(f"#### 🟢 In Your Range — {len(in_range_df)} players")
+            st.markdown(f"#### In Your Range: {len(in_range_df)} players")
             st.caption("Players who historically transferred to programs at your tier or below. These are your realistic targets.")
             if in_range_df.empty:
                 st.info("No in-range players match these filters. Try lowering the Min Skill Index.")
             else:
                 st.dataframe(in_range_df[_pool_cols].rename(columns=_pool_rename), hide_index=True, height=380)
 
-            st.markdown(f"#### 🌟 Above Your Level — {len(above_df)} players")
+            st.markdown(f"#### Above Your Level: {len(above_df)} players")
             st.caption(
                 f"Players who historically went to **higher-tier** programs than {TIER_LABELS[coach_dest_tier]}. "
-                "Historically out of range — but a strong pitch, more playing time, or the right fit could land one. "
+                "Historically out of range, but a strong pitch, more playing time, or the right fit could land one. "
                 "Skill Index shown is from their **previous school** before that move."
             )
             if above_df.empty:
@@ -2337,11 +2302,11 @@ with tab6:
                 st.dataframe(above_df[_pool_cols].rename(columns=_pool_rename), hide_index=True, height=300)
 
             st.caption(
-                "**BPM / USG% / TS%** = stats at their previous school — what you'd see scouting them. "
+                "**BPM / USG% / TS%** = stats at their previous school: what you'd see scouting them. "
                 "**Skill Index (outcome)** = blended performance score at their new school (historical result)."
             )
 
-            # Unscored transfers — only relevant when no stat filters are active
+            # Unscored transfers: only relevant when no stat filters are active
             if pool_bpm_min <= -10.0 and pool_usg_min <= 10.0 and pool_ts_min <= 35.0:
                 try:
                     unscored_sql = """
@@ -2375,7 +2340,7 @@ with tab6:
                     if not u_df.empty:
                         u_df["to_tier_label"]   = u_df["to_tier"].map(TIER_LABELS)
                         u_df["from_tier_label"] = u_df["from_tier"].map(TIER_LABELS)
-                        with st.expander(f"📊 {len(u_df)} Additional Portal Entries (No Skill Index Yet)", expanded=False):
+                        with st.expander(f"{len(u_df)} Additional Portal Entries (No Skill Index Yet)", expanded=False):
                             st.caption("These transfers are in the portal record but don't have CBB Reference stats yet to compute a Skill Index. Name + school movement is confirmed.")
                             u_df["season"] = u_df["season"].apply(fmt_season)
                             st.dataframe(
@@ -2388,12 +2353,13 @@ with tab6:
                 except Exception:
                     pass
     except Exception as e:
-        st.info(f"Pool query error: {e}")
+        st.info("Transfer pool data isn't available right now.")
+        st.caption(f"Technical detail: {e}")
 
     # ════════════════════════════════════════════════════════════════════════════
-    # MODE 1 — Pre-Transfer Profile Search
+    # MODE 1: Pre-Transfer Profile Search
     # ════════════════════════════════════════════════════════════════════════════
-    if coach_mode == "🔍 By Pre-Transfer Profile":
+    if coach_mode == "By Pre-Transfer Profile":
         st.markdown("---")
         st.markdown("### Pre-Transfer Production & Physical Profile")
         st.caption(
@@ -2411,7 +2377,7 @@ with tab6:
         with fp2:
             coach_height_cat = st.selectbox(
                 "Height Profile", ["Any", "Short", "Average", "Tall"], key="coach_height_cat",
-                help="Relative to their position — 6'4\" C is Short; 6'4\" G is Tall"
+                help="Relative to their position: 6'4\" C is Short; 6'4\" G is Tall"
             )
             coach_weight_cat = st.selectbox(
                 "Build", ["Any", "Lean", "Average", "Heavy"], key="coach_weight_cat",
@@ -2496,9 +2462,9 @@ with tab6:
                     my_tier_label = TIER_LABELS.get(coach_dest_tier, coach_dest_tier)
 
                     results["height_cat"] = results.apply(
-                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "—", axis=1)
+                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "N/A", axis=1)
                     results["weight_cat"] = results.apply(
-                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "—", axis=1)
+                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "N/A", axis=1)
 
                     def _phys_ok_p1(row):
                         h = (coach_height_cat == "Any") or (row["height_cat"] == coach_height_cat)
@@ -2539,13 +2505,13 @@ with tab6:
                             sp = same_tier["transfer_verdict"].isin(SV).mean() * 100
                             st.success(
                                 f"**{strong_n} Strong · {solid_n} Solid** · "
-                                f"{len(same_tier)} went to {my_tier_label}{conf_str} — "
+                                f"{len(same_tier)} went to {my_tier_label}{conf_str}, "
                                 f"{sp:.0f}% High-Impact or Positive Acquisition"
                             )
                         else:
                             st.info(
                                 f"**{strong_n} Strong · {solid_n} Solid** · "
-                                f"None went to {my_tier_label} — enable 'Show all D1 tiers'."
+                                f"None went to {my_tier_label}. Enable 'Show all D1 tiers'."
                             )
 
                         if len(same_tier) >= 3:
@@ -2574,9 +2540,9 @@ with tab6:
                         mc1.metric("Strong Matches", strong_n)
                         mc2.metric("Solid Matches", solid_n)
                         mc3.metric("Avg Skill Index Before",
-                                   f"{results['skill_index_before'].mean():.2f}" if results["skill_index_before"].notna().any() else "—")
+                                   f"{results['skill_index_before'].mean():.2f}" if results["skill_index_before"].notna().any() else "N/A")
                         mc4.metric(f"Avg Skill Index After ({my_tier_label})",
-                                   f"{same_tier['skill_index_after'].mean():.2f}" if len(same_tier) > 0 else "—")
+                                   f"{same_tier['skill_index_after'].mean():.2f}" if len(same_tier) > 0 else "N/A")
 
                         st.subheader("Matching Players")
                         st.caption(
@@ -2585,7 +2551,7 @@ with tab6:
                             f"Players who went to {my_tier_label} appear first."
                         )
                         results["height_str"] = results["height_in"].apply(
-                            lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—")
+                            lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "N/A")
                         results["cbb_ref"] = results["full_name"].apply(
                             lambda n: f"https://www.sports-reference.com/cbb/search/search.fcgi?search={n.replace(' ','+')}")
                         results["season"] = results["season"].apply(fmt_season)
@@ -2605,22 +2571,23 @@ with tab6:
                         st.dataframe(
                             results[[c for c in p1_cols if c in results.columns]].rename(columns=p1_cols), hide_index=True,
                             column_config={
-                                "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
+                                "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="Profile"),
                                 "Match": st.column_config.TextColumn("Match", width="small"),
                             },
                         )
             except Exception as e:
-                st.error(f"Query error: {e}")
+                st.error("Couldn't run that search.")
+                st.caption(f"Technical detail: {e}")
 
     # ════════════════════════════════════════════════════════════════════════════
-    # MODE 2 — Expected Contribution Search
+    # MODE 2: Expected Contribution Search
     # ════════════════════════════════════════════════════════════════════════════
     else:
         st.markdown("---")
         st.markdown("### What You Need from the Transfer")
         st.caption(
             "Define the contribution you expect at your level. We find every historical transfer "
-            "who delivered that — then show you **what they looked like before transferring** "
+            "who delivered that, then show you **what they looked like before transferring** "
             "so you know the pre-transfer profile to target in the portal."
         )
 
@@ -2710,11 +2677,11 @@ with tab6:
                     ec_results["to_tier_label"]   = ec_results["to_tier"].map(TIER_LABELS)
                     ec_results["from_tier_label"] = ec_results["from_tier"].map(TIER_LABELS)
                     ec_results["height_str"]       = ec_results["height_in"].apply(
-                        lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "—")
+                        lambda x: f"{int(x)//12}'{int(x)%12}\"" if pd.notna(x) else "N/A")
                     ec_results["height_cat"] = ec_results.apply(
-                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "—", axis=1)
+                        lambda r: _phys_cat(r["height_in"], r["position"], HEIGHT_BUCKETS) or "N/A", axis=1)
                     ec_results["weight_cat"] = ec_results.apply(
-                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "—", axis=1)
+                        lambda r: _phys_cat(r["weight_lbs"], r["position"], WEIGHT_BUCKETS) or "N/A", axis=1)
 
                     # ── Summary: what is the pre-transfer profile of these players? ──
                     st.success(
@@ -2727,12 +2694,12 @@ with tab6:
                     usg_b_valid = ec_results["usage_before"].dropna()
                     profile_cols[0].metric(
                         "Avg Skill Index Before",
-                        f"{skl_b_valid.mean():.2f}" if len(skl_b_valid) else "—",
-                        help="Average Skill Index at previous school — this is what to look for in the portal"
+                        f"{skl_b_valid.mean():.2f}" if len(skl_b_valid) else "N/A",
+                        help="Average Skill Index at previous school. This is what to look for in the portal"
                     )
                     profile_cols[1].metric(
                         "Avg USG% Before",
-                        f"{usg_b_valid.mean():.1f}%" if len(usg_b_valid) else "—",
+                        f"{usg_b_valid.mean():.1f}%" if len(usg_b_valid) else "N/A",
                         help="Average usage rate at previous school"
                     )
                     profile_cols[2].metric(
@@ -2781,7 +2748,7 @@ with tab6:
 
                     # ── Full results table ─────────────────────────────────────────
                     st.markdown("---")
-                    st.subheader("Players Who Delivered — and Their Pre-Transfer Profile")
+                    st.subheader("Players Who Delivered, and Their Pre-Transfer Profile")
                     st.caption(
                         "These players transferred to your tier and met your contribution target. "
                         "Their **pre-transfer stats** (Skill Index Before, USG Before) are what you're looking "
@@ -2808,8 +2775,9 @@ with tab6:
                         ec_results[[c for c in ec_display_cols if c in ec_results.columns]]
                         .rename(columns=ec_display_cols), hide_index=True,
                         column_config={
-                            "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="🔗 Profile"),
+                            "CBB Ref": st.column_config.LinkColumn("CBB Ref", display_text="Profile"),
                         },
                     )
             except Exception as e:
-                st.error(f"Query error: {e}")
+                st.error("Couldn't run that search.")
+                st.caption(f"Technical detail: {e}")
