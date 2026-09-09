@@ -1,0 +1,31 @@
+name: Supabase keepalive
+
+# Free-tier Supabase pauses after 7 days of database inactivity. Runs Monday
+# and Thursday so the longest gap is 4 days, leaving room for one failed run
+# before the 7-day window closes.
+on:
+  schedule:
+    - cron: "0 14 * * 1,4"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install psycopg2
+        run: pip install "psycopg2-binary>=2.9"
+
+      - name: Ping database
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python keepalive.py
